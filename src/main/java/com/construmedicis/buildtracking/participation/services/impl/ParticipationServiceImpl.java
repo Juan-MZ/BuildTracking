@@ -65,7 +65,8 @@ public class ParticipationServiceImpl implements ParticipationService {
         if (!projectRepository.existsById(projectId))
             throw new BusinessRuleException("project.not.found");
         var list = repository.findByProjectId(projectId).stream().map(this::toDTO).collect(Collectors.toList());
-        return new ResponseHandler<>(200, "Participations fetched by project", "/api/participations/project/{projectId}", list).getResponse();
+        return new ResponseHandler<>(200, "Participations fetched by project",
+                "/api/participations/project/{projectId}", list).getResponse();
     }
 
     private ParticipationDTO toDTO(Participation p) {
