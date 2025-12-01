@@ -60,6 +60,14 @@ public class ParticipationServiceImpl implements ParticipationService {
         return new ResponseHandler<Void>(200, "Participation deleted", "/api/participations/{id}", null).getResponse();
     }
 
+    @Override
+    public Response<List<ParticipationDTO>> findByProjectId(Long projectId) {
+        if (!projectRepository.existsById(projectId))
+            throw new BusinessRuleException("project.not.found");
+        var list = repository.findByProjectId(projectId).stream().map(this::toDTO).collect(Collectors.toList());
+        return new ResponseHandler<>(200, "Participations fetched by project", "/api/participations/project/{projectId}", list).getResponse();
+    }
+
     private ParticipationDTO toDTO(Participation p) {
         if (p == null)
             return null;

@@ -39,4 +39,9 @@ public class AttendanceController {
         return ResponseEntity.ok(service.deleteById(id));
     }
 
+    @GetMapping("/participation/{participationId}")
+    public ResponseEntity<Response<List<AttendanceDTO>>> getByParticipationId(@PathVariable Long participationId) {
+        return ResponseEntity.ok(service.findByParticipationId(participationId));
+    }
+
 }

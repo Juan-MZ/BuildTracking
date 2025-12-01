@@ -38,4 +38,9 @@ public class ParticipationController {
     public ResponseEntity<Response<Void>> delete(@PathVariable Long id) {
         return ResponseEntity.ok(service.deleteById(id));
     }
+
+    @GetMapping("/project/{projectId}")
+    public ResponseEntity<Response<List<ParticipationDTO>>> getByProjectId(@PathVariable Long projectId) {
+        return ResponseEntity.ok(service.findByProjectId(projectId));
+    }
 }

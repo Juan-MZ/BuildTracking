@@ -13,4 +13,6 @@ public interface ParticipationService {
     Response<ParticipationDTO> save(ParticipationDTO participation);
 
     Response<Void> deleteById(Long id);
+
+    Response<List<ParticipationDTO>> findByProjectId(Long projectId);
 }

@@ -57,6 +57,14 @@ public class AttendanceServiceImpl implements AttendanceService {
         return new ResponseHandler<Void>(200, "Attendance deleted", "/api/attendances/{id}", null).getResponse();
     }
 
+    @Override
+    public Response<List<AttendanceDTO>> findByParticipationId(Long participationId) {
+        if (!participationRepository.existsById(participationId))
+            throw new BusinessRuleException("participation.not.found");
+        var list = repository.findByParticipationId(participationId).stream().map(this::toDTO).collect(Collectors.toList());
+        return new ResponseHandler<>(200, "Attendances fetched by participation", "/api/attendances/participation/{participationId}", list).getResponse();
+    }
+
     private AttendanceDTO toDTO(Attendance a) {
         if (a == null)
             return null;

@@ -13,4 +13,6 @@ public interface AttendanceService {
     Response<AttendanceDTO> save(AttendanceDTO attendance);
 
     Response<Void> deleteById(Long id);
+
+    Response<List<AttendanceDTO>> findByParticipationId(Long participationId);
 }
