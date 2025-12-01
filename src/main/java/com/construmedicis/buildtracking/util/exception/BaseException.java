@@ -49,16 +49,4 @@ public class BaseException extends RuntimeException {
     private static String getMessage(String key) {
         return messages.getString(key);
     }
-
-    /**
-     * Formats the message and fills the missing part using the argument.
-     *
-     * @param message the message to format
-     * @param arg     the argument
-     * @return the formatted and filled message
-     */
-    private static String formatMessage(String message, String arg) {
-        return message.replace("{}", arg);
-    }
-
 }
