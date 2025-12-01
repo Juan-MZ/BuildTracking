@@ -1,6 +1,11 @@
 package com.construmedicis.buildtracking.project.models;
 
 import java.time.LocalDateTime;
+import java.util.List;
+
+import com.construmedicis.buildtracking.employee.models.Employee;
+import com.construmedicis.buildtracking.item.models.Item;
+import com.construmedicis.buildtracking.participation.models.Participation;
 
 import lombok.*;
 import jakarta.persistence.*;
@@ -38,4 +43,11 @@ public class Project {
     private LocalDateTime startDate;
     @Column(name = "project_end_date")
     private LocalDateTime endDate;
+
+    @ManyToMany(mappedBy = "projects")
+    private List<Employee> employees;
+    @ManyToMany(mappedBy = "projects")
+    private List<Item> items;
+    @OneToMany(mappedBy = "project", cascade = CascadeType.ALL)
+    private List<Participation> participations;
 }

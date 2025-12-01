@@ -2,6 +2,9 @@ package com.construmedicis.buildtracking.participation.models;
 
 import lombok.*;
 
+import java.util.List;
+
+import com.construmedicis.buildtracking.attendance.models.Attendance;
 import com.construmedicis.buildtracking.employee.models.Employee;
 import com.construmedicis.buildtracking.project.models.Project;
 
@@ -29,4 +32,7 @@ public class Participation {
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "project_id")
     private Project project;
+
+    @OneToMany(mappedBy = "participation", cascade = CascadeType.ALL)
+    private List<Attendance> attendances;
 }
