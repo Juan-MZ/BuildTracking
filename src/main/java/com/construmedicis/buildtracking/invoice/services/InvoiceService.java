@@ -28,12 +28,15 @@ public interface InvoiceService {
     Response<InvoiceDTO> assignProject(Long invoiceId, Long projectId);
 
     /**
-     * Sincroniza facturas desde Gmail con la etiqueta especificada.
+     * Sincroniza facturas desde Gmail con la etiqueta especificada y rango de
+     * fechas opcional.
      * Descarga XMLs, verifica duplicados, crea facturas, asigna proyectos y
      * actualiza catálogo.
      * 
      * @param gmailLabel Etiqueta de Gmail para filtrar correos
+     * @param after      Fecha desde (formato yyyy/MM/dd, opcional)
+     * @param before     Fecha hasta (formato yyyy/MM/dd, opcional)
      * @return Resultado con estadísticas de sincronización
      */
-    Response<EmailSyncResultDTO> syncFromGmail(String gmailLabel);
+    Response<EmailSyncResultDTO> syncFromGmail(String gmailLabel, String after, String before);
 }

@@ -245,7 +245,7 @@ public class InvoiceServiceImpl implements InvoiceService {
 
     @Override
     @Transactional
-    public Response<EmailSyncResultDTO> syncFromGmail(String gmailLabel) {
+    public Response<EmailSyncResultDTO> syncFromGmail(String gmailLabel, String after, String before) {
         EmailSyncResultDTO result = EmailSyncResultDTO.builder()
                 .emailsProcessed(0)
                 .invoicesCreated(0)
@@ -264,8 +264,8 @@ public class InvoiceServiceImpl implements InvoiceService {
                     "src/main/resources/credentials.json",
                     "src/main/resources/tokens");
 
-            // Buscar mensajes con la etiqueta
-            List<Message> messages = fetchMessagesFromGmail(gmailService, gmailLabel);
+            // Buscar mensajes con la etiqueta y rango de fechas
+            List<Message> messages = fetchMessagesFromGmail(gmailService, gmailLabel, after, before);
             result.setEmailsProcessed(messages.size());
 
             log.info("Encontrados {} correos con etiqueta '{}'", messages.size(), gmailLabel);
@@ -302,7 +302,8 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .getResponse();
     }
 
-    private List<Message> fetchMessagesFromGmail(Gmail gmailService, String gmailLabel) throws Exception {
+    private List<Message> fetchMessagesFromGmail(Gmail gmailService, String gmailLabel, String after, String before)
+            throws Exception {
         List<Message> allMessages = new ArrayList<>();
 
         // Construir query con formato correcto para etiquetas
@@ -310,7 +311,18 @@ public class InvoiceServiceImpl implements InvoiceService {
                 ? "label:\"" + gmailLabel + "\""
                 : "label:" + gmailLabel;
 
-        String query = labelQuery + " has:attachment";
+        // Agregar filtros de fecha si están presentes (formato: yyyy/MM/dd)
+        StringBuilder queryBuilder = new StringBuilder(labelQuery);
+        queryBuilder.append(" has:attachment");
+
+        if (after != null && !after.trim().isEmpty()) {
+            queryBuilder.append(" after:").append(after);
+        }
+        if (before != null && !before.trim().isEmpty()) {
+            queryBuilder.append(" before:").append(before);
+        }
+
+        String query = queryBuilder.toString();
         log.info("Gmail query: {}", query);
 
         ListMessagesResponse response = gmailService.users().messages()
@@ -472,22 +484,38 @@ public class InvoiceServiceImpl implements InvoiceService {
             ParsedInvoiceDTO parsedInvoice = xmlParser.parseXml(xmlFile);
             log.info("Factura parseada: {}", parsedInvoice.getInvoiceNumber());
 
-            // Verificar si ya existe (evitar duplicados)
+            // Verificar si ya existe (actualizar si es corrección)
             Optional<Invoice> existingInvoice = invoiceRepository
                     .findByInvoiceNumber(parsedInvoice.getInvoiceNumber());
+
+            Invoice savedInvoice;
+            boolean isUpdate = false;
+
             if (existingInvoice.isPresent()) {
-                log.info("Factura {} ya existe (ID: {}), omitiendo",
+                // Factura existe - actualizar con nueva información (corrección)
+                log.info("Factura {} ya existe (ID: {}), actualizando con corrección",
                         parsedInvoice.getInvoiceNumber(), existingInvoice.get().getId());
-                return;
+
+                Invoice invoice = existingInvoice.get();
+                updateInvoiceFromParsed(invoice, parsedInvoice);
+
+                // Eliminar items antiguos
+                invoiceItemService.deleteByInvoiceId(invoice.getId());
+
+                savedInvoice = invoiceRepository.save(invoice);
+                isUpdate = true;
+                result.setInvoicesCreated(result.getInvoicesCreated() + 1); // Contador incluye actualizaciones
+
+                log.info("Factura {} actualizada exitosamente", parsedInvoice.getInvoiceNumber());
+            } else {
+                // Crear nueva factura
+                InvoiceDTO invoiceDTO = createInvoiceFromParsed(parsedInvoice, xmlFile.getAbsolutePath());
+                savedInvoice = fromDTO(invoiceDTO);
+                savedInvoice = invoiceRepository.save(savedInvoice);
+                result.setInvoicesCreated(result.getInvoicesCreated() + 1);
+
+                log.info("Factura {} creada exitosamente", parsedInvoice.getInvoiceNumber());
             }
-
-            // Crear factura con la ruta del XML extraído
-            InvoiceDTO invoiceDTO = createInvoiceFromParsed(parsedInvoice, xmlFile.getAbsolutePath());
-            Invoice savedInvoice = fromDTO(invoiceDTO);
-            savedInvoice = invoiceRepository.save(savedInvoice);
-            result.setInvoicesCreated(result.getInvoicesCreated() + 1);
-
-            log.info("Factura {} creada exitosamente", parsedInvoice.getInvoiceNumber());
 
             // Crear items y vincular al catálogo
             for (ParsedInvoiceItemDTO parsedItem : parsedInvoice.getItems()) {
@@ -616,22 +644,38 @@ public class InvoiceServiceImpl implements InvoiceService {
             ParsedInvoiceDTO parsedInvoice = xmlParser.parseXml(tempFile);
             log.info("Factura parseada: {}", parsedInvoice.getInvoiceNumber());
 
-            // Verificar si ya existe (evitar duplicados)
+            // Verificar si ya existe (actualizar si es corrección)
             Optional<Invoice> existingInvoice = invoiceRepository
                     .findByInvoiceNumber(parsedInvoice.getInvoiceNumber());
+
+            Invoice savedInvoice;
+            boolean isUpdate = false;
+
             if (existingInvoice.isPresent()) {
-                log.info("Factura {} ya existe (ID: {}), omitiendo",
+                // Factura existe - actualizar con nueva información (corrección)
+                log.info("Factura {} ya existe (ID: {}), actualizando con corrección",
                         parsedInvoice.getInvoiceNumber(), existingInvoice.get().getId());
-                return;
+
+                Invoice invoice = existingInvoice.get();
+                updateInvoiceFromParsed(invoice, parsedInvoice);
+
+                // Eliminar items antiguos
+                invoiceItemService.deleteByInvoiceId(invoice.getId());
+
+                savedInvoice = invoiceRepository.save(invoice);
+                isUpdate = true;
+                result.setInvoicesCreated(result.getInvoicesCreated() + 1); // Contador incluye actualizaciones
+
+                log.info("Factura {} actualizada exitosamente", parsedInvoice.getInvoiceNumber());
+            } else {
+                // Crear nueva factura
+                InvoiceDTO invoiceDTO = createInvoiceFromParsed(parsedInvoice, tempFile.getAbsolutePath());
+                savedInvoice = fromDTO(invoiceDTO);
+                savedInvoice = invoiceRepository.save(savedInvoice);
+                result.setInvoicesCreated(result.getInvoicesCreated() + 1);
+
+                log.info("Factura {} creada exitosamente", parsedInvoice.getInvoiceNumber());
             }
-
-            // Crear factura con la ruta del XML
-            InvoiceDTO invoiceDTO = createInvoiceFromParsed(parsedInvoice, tempFile.getAbsolutePath());
-            Invoice savedInvoice = fromDTO(invoiceDTO);
-            savedInvoice = invoiceRepository.save(savedInvoice);
-            result.setInvoicesCreated(result.getInvoicesCreated() + 1);
-
-            log.info("Factura {} creada exitosamente", parsedInvoice.getInvoiceNumber());
 
             // Crear items y vincular al catálogo
             for (ParsedInvoiceItemDTO parsedItem : parsedInvoice.getItems()) {
@@ -714,6 +758,26 @@ public class InvoiceServiceImpl implements InvoiceService {
                 }
             }
         }
+    }
+
+    /**
+     * Actualiza una factura existente con datos parseados (para correcciones).
+     */
+    private void updateInvoiceFromParsed(Invoice invoice, ParsedInvoiceDTO parsed) {
+        invoice.setIssueDate(parsed.getIssueDate());
+        invoice.setDueDate(parsed.getDueDate());
+        invoice.setSupplierId(parsed.getSupplierId());
+        invoice.setSupplierName(parsed.getSupplierName());
+        invoice.setSubtotal(parsed.getSubtotal());
+        invoice.setTax(parsed.getTax());
+        invoice.setWithholdingTax(parsed.getWithholdingTax() != null ? parsed.getWithholdingTax() : BigDecimal.ZERO);
+        invoice.setWithholdingICA(parsed.getWithholdingICA() != null ? parsed.getWithholdingICA() : BigDecimal.ZERO);
+        invoice.setTotal(parsed.getTotal());
+        // Mantener project y assignmentConfidence de la factura original
+        // Resetear confianza a 0 para re-evaluar reglas con nueva información
+        invoice.setAssignmentConfidence(0);
+        log.info("Factura {} actualizada: subtotal={}, tax={}, total={}",
+                invoice.getInvoiceNumber(), invoice.getSubtotal(), invoice.getTax(), invoice.getTotal());
     }
 
     private InvoiceDTO createInvoiceFromParsed(ParsedInvoiceDTO parsed) {

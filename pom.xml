@@ -11,7 +11,7 @@
 	</parent>
 	<groupId>com.construmedicis</groupId>
 	<artifactId>buildtracking</artifactId>
-	<version>0.0.3-SNAPSHOT</version>
+	<version>0.0.6-SNAPSHOT</version>
 	<name>buildtracking</name>
 	<description>Un proyecto destinado a servir como backend de una herramienta para constructoras o profesionales que deseen llevar seguimiento a una obra de construcción.</description>
 	<url />

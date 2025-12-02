@@ -23,8 +23,8 @@ public class InvoiceItemServiceImpl implements InvoiceItemService {
     private final ItemRepository itemRepository;
 
     public InvoiceItemServiceImpl(InvoiceItemRepository invoiceItemRepository,
-                                 InvoiceRepository invoiceRepository,
-                                 ItemRepository itemRepository) {
+            InvoiceRepository invoiceRepository,
+            ItemRepository itemRepository) {
         this.invoiceItemRepository = invoiceItemRepository;
         this.invoiceRepository = invoiceRepository;
         this.itemRepository = itemRepository;
@@ -52,7 +52,8 @@ public class InvoiceItemServiceImpl implements InvoiceItemService {
     public Response<InvoiceItemDTO> findById(Long id) {
         InvoiceItem invoiceItem = invoiceItemRepository.findById(id)
                 .orElseThrow(() -> new BusinessRuleException("invoice.item.not.found"));
-        return new ResponseHandler<>(200, "Invoice item found", "/api/invoice-items/{id}", toDTO(invoiceItem)).getResponse();
+        return new ResponseHandler<>(200, "Invoice item found", "/api/invoice-items/{id}", toDTO(invoiceItem))
+                .getResponse();
     }
 
     @Override
@@ -81,7 +82,8 @@ public class InvoiceItemServiceImpl implements InvoiceItemService {
         List<InvoiceItemDTO> items = invoiceItemRepository.findByInvoiceId(invoiceId).stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
-        return new ResponseHandler<>(200, "Invoice items found", "/api/invoice-items/invoice/{invoiceId}", items).getResponse();
+        return new ResponseHandler<>(200, "Invoice items found", "/api/invoice-items/invoice/{invoiceId}", items)
+                .getResponse();
     }
 
     @Override
@@ -92,11 +94,25 @@ public class InvoiceItemServiceImpl implements InvoiceItemService {
         List<InvoiceItemDTO> items = invoiceItemRepository.findByItemId(itemId).stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
-        return new ResponseHandler<>(200, "Invoice items found", "/api/invoice-items/item/{itemId}", items).getResponse();
+        return new ResponseHandler<>(200, "Invoice items found", "/api/invoice-items/item/{itemId}", items)
+                .getResponse();
+    }
+
+    @Override
+    @Transactional
+    public Response<Void> deleteByInvoiceId(Long invoiceId) {
+        if (!invoiceRepository.existsById(invoiceId)) {
+            throw new BusinessRuleException("invoice.not.found");
+        }
+        List<InvoiceItem> items = invoiceItemRepository.findByInvoiceId(invoiceId);
+        invoiceItemRepository.deleteAll(items);
+        return new ResponseHandler<Void>(200, "Invoice items deleted", "/api/invoice-items/invoice/{invoiceId}", null)
+                .getResponse();
     }
 
     private InvoiceItemDTO toDTO(InvoiceItem item) {
-        if (item == null) return null;
+        if (item == null)
+            return null;
         return InvoiceItemDTO.builder()
                 .id(item.getId())
                 .invoiceId(item.getInvoice() != null ? item.getInvoice().getId() : null)

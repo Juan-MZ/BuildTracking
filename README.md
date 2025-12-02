@@ -99,14 +99,14 @@ Nota: todos los controladores devuelven un objeto `Response<T>` (status, userMes
   - GET  /api/invoices/date-range?startDate=yyyy-MM-dd&endDate=yyyy-MM-dd  *(por rango de fechas)*
   - GET  /api/invoices/pending-review?maxConfidence=70  *(facturas con baja confianza en asignación)*
   - POST /api/invoices  (body: InvoiceDTO)
-  - **POST /api/invoices/sync-gmail?gmailLabel=Facturas/Proyecto1** 🎯 *(sincronización automática desde Gmail)* 🆕
+  - **POST /api/invoices/sync-gmail?gmailLabel=Facturas/Proyecto1&after=2025/11/01&before=2025/11/30** 🎯 *(sincronización automática desde Gmail con rango de fechas opcional)* 🆕
   - PUT  /api/invoices/{id}/assign-project?projectId=X  *(asignar proyecto manualmente)*
   - DELETE /api/invoices/{id}
 
 *Flujo de sincronización desde Gmail*:
-1. Llama `POST /api/invoices/sync-gmail?gmailLabel=Facturas` (especifica etiqueta de Gmail)
+1. Llama `POST /api/invoices/sync-gmail?gmailLabel=Facturas&after=2025/11/01&before=2025/11/30` (especifica etiqueta y opcionalmente rango de fechas en formato yyyy/MM/dd)
 2. Sistema autentica con Gmail usando OAuth 2.0 (credentials.json en src/main/resources/)
-3. Busca correos con esa etiqueta que tengan adjuntos
+3. Busca correos con esa etiqueta que tengan adjuntos en el rango de fechas especificado (si se provee)
 4. Descarga adjuntos:
    - **XMLs directos**: Procesa inmediatamente
    - **ZIPs**: Descomprime y extrae XMLs contenidos (las facturas suelen enviarse comprimidas con PDF+XML)
@@ -172,10 +172,14 @@ Para que la sincronización automática funcione, necesitas configurar credencia
    - Habilitar Gmail API en Google Cloud Console
 2. **tokens/**: Directorio para tokens de acceso (se crea automáticamente en `src/main/resources/tokens/`)
 3. **Primera autenticación**: Al llamar por primera vez `POST /api/invoices/sync-gmail` se abrirá el navegador para autorizar
+4. **Parámetros opcionales**:
+   - `after`: Fecha desde (formato yyyy/MM/dd) - Ej: `2025/11/01`
+   - `before`: Fecha hasta (formato yyyy/MM/dd) - Ej: `2025/11/30`
+   - Ejemplo completo: `POST /api/invoices/sync-gmail?gmailLabel=Facturas&after=2025/11/01&before=2025/11/30`
 
 ### EmailConfig (Configuración legacy - DEPRECADO) 📧
 
-**NOTA**: El módulo `EmailConfig` está deprecado. Usa directamente `POST /api/invoices/sync-gmail?gmailLabel=TuEtiqueta`
+**NOTA**: El módulo `EmailConfig` está deprecado. Usa directamente `POST /api/invoices/sync-gmail?gmailLabel=TuEtiqueta&after=yyyy/MM/dd&before=yyyy/MM/dd`
 
 Los endpoints de EmailConfig aún funcionan pero ya no son necesarios:
   - GET  /api/email-config

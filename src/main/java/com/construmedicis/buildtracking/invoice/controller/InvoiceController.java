@@ -78,11 +78,15 @@ public class InvoiceController {
      * de items.
      * 
      * @param gmailLabel Etiqueta de Gmail (ej: "Facturas/Proyecto1")
+     * @param after      Fecha desde (formato yyyy/MM/dd, opcional)
+     * @param before     Fecha hasta (formato yyyy/MM/dd, opcional)
      * @return Resultado con estadísticas de sincronización
      */
     @PostMapping("/sync-gmail")
     public ResponseEntity<Response<EmailSyncResultDTO>> syncFromGmail(
-            @RequestParam String gmailLabel) {
-        return ResponseEntity.ok(service.syncFromGmail(gmailLabel));
+            @RequestParam String gmailLabel,
+            @RequestParam(required = false) String after,
+            @RequestParam(required = false) String before) {
+        return ResponseEntity.ok(service.syncFromGmail(gmailLabel, after, before));
     }
 }

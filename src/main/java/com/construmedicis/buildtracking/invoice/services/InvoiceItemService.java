@@ -18,4 +18,6 @@ public interface InvoiceItemService {
     Response<List<InvoiceItemDTO>> findByInvoiceId(Long invoiceId);
 
     Response<List<InvoiceItemDTO>> findByItemId(Long itemId);
+
+    Response<Void> deleteByInvoiceId(Long invoiceId);
 }
