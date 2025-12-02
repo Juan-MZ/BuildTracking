@@ -35,7 +35,7 @@ public class RetentionConfigServiceImpl implements RetentionConfigService {
     public Response<RetentionConfigDTO> findByYear(Integer year) {
         RetentionConfig config = repository.findByYear(year)
                 .orElseThrow(() -> new BusinessRuleException("retention.config.not.found.for.year"));
-        return new ResponseHandler<>(200, "Retention configuration found", "/api/retention-config/year/{year}", 
+        return new ResponseHandler<>(200, "Retention configuration found", "/api/retention-config/year/{year}",
                 toDTO(config)).getResponse();
     }
 
@@ -57,13 +57,13 @@ public class RetentionConfigServiceImpl implements RetentionConfigService {
             config = repository.findById(dto.getId())
                     .orElseThrow(() -> new BusinessRuleException("retention.config.not.found"));
             isUpdate = true;
-        } 
+        }
         // Si existe una configuración para el año, actualizarla
         else if (repository.existsByYear(dto.getYear())) {
             config = repository.findByYear(dto.getYear())
                     .orElseThrow(() -> new BusinessRuleException("retention.config.not.found"));
             isUpdate = true;
-        } 
+        }
         // Crear nueva configuración
         else {
             config = new RetentionConfig();
@@ -73,10 +73,10 @@ public class RetentionConfigServiceImpl implements RetentionConfigService {
         config.setMinimumAmount(dto.getMinimumAmount());
 
         RetentionConfig saved = repository.save(config);
-        
+
         int statusCode = isUpdate ? 200 : 201;
         String message = isUpdate ? "Retention configuration updated" : "Retention configuration created";
-        
+
         return new ResponseHandler<>(statusCode, message, "/api/retention-config", toDTO(saved))
                 .getResponse();
     }
@@ -93,7 +93,8 @@ public class RetentionConfigServiceImpl implements RetentionConfigService {
     }
 
     private RetentionConfigDTO toDTO(RetentionConfig config) {
-        if (config == null) return null;
+        if (config == null)
+            return null;
         return RetentionConfigDTO.builder()
                 .id(config.getId())
                 .year(config.getYear())

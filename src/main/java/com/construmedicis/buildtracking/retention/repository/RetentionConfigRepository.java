@@ -8,8 +8,8 @@ import java.util.Optional;
 
 @Repository
 public interface RetentionConfigRepository extends JpaRepository<RetentionConfig, Long> {
-    
+
     Optional<RetentionConfig> findByYear(Integer year);
-    
+
     boolean existsByYear(Integer year);
 }
