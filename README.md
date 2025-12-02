@@ -100,9 +100,27 @@ Nota: todos los controladores devuelven un objeto `Response<T>` (status, userMes
   - GET  /api/invoices/date-range?startDate=yyyy-MM-dd&endDate=yyyy-MM-dd  *(por rango de fechas)*
   - GET  /api/invoices/pending-review?maxConfidence=70  *(facturas con baja confianza en asignación)*
   - POST /api/invoices  (body: InvoiceDTO)
+  - **POST /api/invoices/sync-gmail?gmailLabel=Facturas/Proyecto1** 🎯 *(sincronización automática desde Gmail)* 🆕
   - PUT  /api/invoices/{id}/assign-project?projectId=X  *(asignar proyecto manualmente)*
   - PUT  /api/invoices/{id}/payment-status?paymentStatus=PAID  *(actualizar estado de pago)*
   - DELETE /api/invoices/{id}
+
+*Flujo de sincronización desde Gmail*:
+1. Llama `POST /api/invoices/sync-gmail?gmailLabel=Facturas` (especifica etiqueta de Gmail)
+2. Sistema autentica con Gmail usando OAuth 2.0 (credentials.json en src/main/resources/)
+3. Busca correos con esa etiqueta que tengan adjuntos
+4. Descarga adjuntos XML (formato DIAN - facturas electrónicas Colombia)
+5. Parsea cada XML y **verifica si ya existe** en BD por número de factura (evita duplicados)
+6. Para **facturas nuevas**:
+   - Crea `Invoice` con `source=EMAIL_AUTO` y `paymentStatus=PENDING`
+   - Para cada ítem del XML:
+     * Busca/crea `Item` en catálogo (matching por código o descripción)
+     * Crea `InvoiceItem` vinculado al `Item` del catálogo
+   - Evalúa **reglas de asignación automática**:
+     * Si confianza ≥ 70%: asigna factura al proyecto y asocia items al proyecto
+     * Si confianza < 70%: marca para revisión manual
+7. Elimina XMLs temporales (no se almacenan en disco)
+8. Retorna estadísticas: emails procesados, facturas creadas, auto-asignadas, pendientes revisión
 
 ### InvoiceItem (Líneas de factura)
   - GET  /api/invoice-items
@@ -142,52 +160,30 @@ Nota: todos los controladores devuelven un objeto `Response<T>` (status, userMes
 3. Retorna projectId, nombre, confianza y razón de la coincidencia
 4. Si confianza < 70%, la factura queda pendiente de revisión manual
 
-### EmailConfig (Sincronización automática con Gmail) 📧
-  - GET  /api/email-config
-  - GET  /api/email-config/{id}
-  - GET  /api/email-config/project/{projectId}  *(configuración de un proyecto)*
-  - GET  /api/email-config/auto-sync  *(solo configuraciones con auto-sync habilitado)*
-  - POST /api/email-config  (body: EmailConfigDTO)
-  - PUT  /api/email-config/{id}  (body: EmailConfigDTO)
-  - DELETE /api/email-config/{id}
-  - **POST /api/email-config/{id}/sync** 🎯 *(sincronización manual de facturas)*
+## 🔐 Configuración Gmail OAuth 2.0
 
-*Configuración requerida*:
-1. **credentials.json**: Archivo de credenciales OAuth 2.0 de Google Cloud Console
+Para que la sincronización automática funcione, necesitas configurar credenciales OAuth 2.0:
+
+1. **credentials.json**: Archivo de credenciales de Google Cloud Console
    - Ubicación: `src/main/resources/credentials.json`
    - Obtener en: https://console.cloud.google.com/apis/credentials
    - Habilitar Gmail API en Google Cloud Console
-2. **tokens/**: Directorio donde se almacenan los tokens de acceso (se crea automáticamente en `src/main/resources/tokens/`)
-3. **gmailLabel**: Etiqueta/carpeta de Gmail de donde descargar facturas (ej: "Facturas/Proyecto1")
+2. **tokens/**: Directorio para tokens de acceso (se crea automáticamente en `src/main/resources/tokens/`)
+3. **Primera autenticación**: Al llamar por primera vez `POST /api/invoices/sync-gmail` se abrirá el navegador para autorizar
 
-*Flujo de sincronización automática*:
-1. Usuario llama `POST /api/email-config/{id}/sync`
-2. Sistema autentica con Gmail usando OAuth 2.0
-3. Busca correos con la etiqueta configurada desde `lastSyncDate`
-4. Descarga adjuntos XML (formato DIAN - facturas electrónicas Colombia)
-5. Parsea XML: número, fechas, proveedor, ítems (con código y descripción), subtotal, IVA, retenciones, total
-6. **Para cada ítem de la factura**:
-   - Busca en catálogo por descripción exacta o código
-   - Si existe: vincula `InvoiceItem.itemId` al `Item` encontrado
-   - Si NO existe: crea nuevo `Item` automáticamente en el catálogo
-   - Asocia el ítem al proyecto de la configuración
-7. Crea `Invoice` con `source=EMAIL_AUTO` y `InvoiceItem`s vinculados en BD
-8. Evalúa reglas de asignación automática:
-   - Si confianza ≥ 70%: asigna automáticamente al proyecto
-   - Si confianza < 70%: marca para revisión manual
-9. **Elimina archivo XML temporal** (no se almacenan archivos, solo datos en BD)
-10. Actualiza `lastSyncDate`
-11. Retorna estadísticas: emails procesados, facturas creadas, auto-asignadas, pendientes de revisión
+### EmailConfig (Configuración legacy - DEPRECADO) 📧
 
-*Características*:
-- **Procesamiento efímero**: Los archivos XML se eliminan inmediatamente después de extraer los datos
-- **Catálogo automático**: Los ítems nuevos se agregan al catálogo sin intervención manual
-- **Vinculación inteligente**: Sistema de matching con 3 estrategias (descripción exacta → código en nombre → crear nuevo)
-- **OAuth 2.0**: Autenticación segura con tokens renovables (primera vez abre navegador para autorizar)
-- **Sincronización incremental**: Solo procesa correos nuevos desde `lastSyncDate`
-- **Auto-sync opcional**: Flag `autoSyncEnabled` para programar sincronizaciones automáticas con scheduler
-- **Validación XML**: Verifica formato DIAN antes de procesar
-- **Trazabilidad**: Campo `source=EMAIL_AUTO` identifica facturas importadas automáticamente
+**NOTA**: El módulo `EmailConfig` está deprecado. Usa directamente `POST /api/invoices/sync-gmail?gmailLabel=TuEtiqueta`
+
+Los endpoints de EmailConfig aún funcionan pero ya no son necesarios:
+  - GET  /api/email-config
+  - GET  /api/email-config/{id}
+  - GET  /api/email-config/project/{projectId}
+  - GET  /api/email-config/auto-sync
+  - POST /api/email-config  (body: EmailConfigDTO)
+  - PUT  /api/email-config/{id}  (body: EmailConfigDTO)
+  - DELETE /api/email-config/{id}
+  - ~~POST /api/email-config/{id}/sync~~ (usar `POST /api/invoices/sync-gmail` en su lugar)
 
 ## 🔐 Manejo de errores y respuestas
 El proyecto implementa un sistema robusto de manejo de errores y respuestas estandarizadas:

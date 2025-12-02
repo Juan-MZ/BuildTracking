@@ -1,5 +1,6 @@
 package com.construmedicis.buildtracking.invoice.controller;
 
+import com.construmedicis.buildtracking.email.dto.EmailSyncResultDTO;
 import com.construmedicis.buildtracking.invoice.dto.InvoiceDTO;
 import com.construmedicis.buildtracking.invoice.models.Invoice.PaymentStatus;
 import com.construmedicis.buildtracking.invoice.services.InvoiceService;
@@ -81,5 +82,20 @@ public class InvoiceController {
             @PathVariable Long id,
             @RequestParam PaymentStatus paymentStatus) {
         return ResponseEntity.ok(service.updatePaymentStatus(id, paymentStatus));
+    }
+
+    /**
+     * Sincroniza facturas desde Gmail.
+     * Descarga XMLs de la etiqueta especificada, verifica duplicados,
+     * crea facturas nuevas, asigna proyectos automáticamente y actualiza catálogo
+     * de items.
+     * 
+     * @param gmailLabel Etiqueta de Gmail (ej: "Facturas/Proyecto1")
+     * @return Resultado con estadísticas de sincronización
+     */
+    @PostMapping("/sync-gmail")
+    public ResponseEntity<Response<EmailSyncResultDTO>> syncFromGmail(
+            @RequestParam String gmailLabel) {
+        return ResponseEntity.ok(service.syncFromGmail(gmailLabel));
     }
 }
