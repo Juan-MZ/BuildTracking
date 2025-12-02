@@ -1,5 +1,6 @@
 package com.construmedicis.buildtracking.item.services.impl;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Optional;
 
@@ -33,8 +34,8 @@ public class ItemMatchingServiceImpl implements ItemMatchingService {
             Item item = existingItem.get();
             log.info("Found existing item by description: {} (ID: {})", item.getDescription(), item.getId());
 
-            // Add project if not already associated
-            if (!item.getProjects().contains(project)) {
+            // Add project if not already associated (only if project is provided)
+            if (project != null && !item.getProjects().contains(project)) {
                 item.getProjects().add(project);
                 itemRepository.save(item);
                 log.info("Associated project {} with item {}", project.getId(), item.getId());
@@ -51,7 +52,7 @@ public class ItemMatchingServiceImpl implements ItemMatchingService {
                 Item item = byName.get();
                 log.info("Found existing item by code in name: {} (ID: {})", item.getName(), item.getId());
 
-                if (!item.getProjects().contains(project)) {
+                if (project != null && !item.getProjects().contains(project)) {
                     item.getProjects().add(project);
                     itemRepository.save(item);
                     log.info("Associated project {} with item {}", project.getId(), item.getId());
@@ -69,7 +70,13 @@ public class ItemMatchingServiceImpl implements ItemMatchingService {
                 : extractShortName(parsedItem.getDescription()));
         newItem.setDescription(parsedItem.getDescription());
         newItem.setQuantity(0); // Quantity in catalog is stock, not from invoice
-        newItem.setProjects(Collections.singletonList(project));
+
+        // Only associate with project if provided
+        if (project != null) {
+            newItem.setProjects(Collections.singletonList(project));
+        } else {
+            newItem.setProjects(new ArrayList<>());
+        }
 
         Item saved = itemRepository.save(newItem);
         log.info("Created new item: {} (ID: {})", saved.getDescription(), saved.getId());
