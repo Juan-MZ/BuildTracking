@@ -45,8 +45,11 @@ public class RetentionConfigServiceImpl implements RetentionConfigService {
         if (dto.getYear() == null) {
             throw new BusinessRuleException("retention.config.year.required");
         }
-        if (dto.getMinimumAmount() == null) {
-            throw new BusinessRuleException("retention.config.minimum.amount.required");
+        if (dto.getMinAmountICA() == null) {
+            throw new BusinessRuleException("retention.config.min.amount.ica.required");
+        }
+        if (dto.getMinAmountFuente() == null) {
+            throw new BusinessRuleException("retention.config.min.amount.fuente.required");
         }
 
         RetentionConfig config;
@@ -70,7 +73,8 @@ public class RetentionConfigServiceImpl implements RetentionConfigService {
         }
 
         config.setYear(dto.getYear());
-        config.setMinimumAmount(dto.getMinimumAmount());
+        config.setMinAmountICA(dto.getMinAmountICA());
+        config.setMinAmountFuente(dto.getMinAmountFuente());
 
         RetentionConfig saved = repository.save(config);
 
@@ -98,7 +102,8 @@ public class RetentionConfigServiceImpl implements RetentionConfigService {
         return RetentionConfigDTO.builder()
                 .id(config.getId())
                 .year(config.getYear())
-                .minimumAmount(config.getMinimumAmount())
+                .minAmountICA(config.getMinAmountICA())
+                .minAmountFuente(config.getMinAmountFuente())
                 .createdAt(config.getCreatedAt())
                 .updatedAt(config.getUpdatedAt())
                 .build();

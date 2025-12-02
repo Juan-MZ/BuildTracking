@@ -16,7 +16,8 @@ public class RetentionConfigDTO {
 
     private Long id;
     private Integer year;
-    private BigDecimal minimumAmount;
+    private BigDecimal minAmountICA;
+    private BigDecimal minAmountFuente;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

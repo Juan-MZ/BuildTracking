@@ -25,8 +25,11 @@ public class RetentionConfig {
     @Column(nullable = false, unique = true)
     private Integer year;
 
-    @Column(name = "minimum_amount", nullable = false, precision = 15, scale = 2)
-    private BigDecimal minimumAmount;
+    @Column(name = "minimum_amount_ica", nullable = false, precision = 15, scale = 2)
+    private BigDecimal minAmountICA;
+
+    @Column(name = "minimum_amount_fuente", nullable = false, precision = 15, scale = 2)
+    private BigDecimal minAmountFuente;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
