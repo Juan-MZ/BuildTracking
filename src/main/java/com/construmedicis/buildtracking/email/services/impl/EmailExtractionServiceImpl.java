@@ -79,7 +79,7 @@ public class EmailExtractionServiceImpl implements EmailExtractionService {
 
             // Buscar mensajes con la etiqueta especificada
             List<Message> messages = fetchMessages(gmailService, emailConfig);
-            
+
             log.info("Encontrados {} mensajes para procesar", messages.size());
 
             // Procesar cada mensaje
@@ -115,9 +115,14 @@ public class EmailExtractionServiceImpl implements EmailExtractionService {
         List<Message> allMessages = new ArrayList<>();
 
         // Construir query: buscar en la etiqueta y desde la última sincronización
-        StringBuilder query = new StringBuilder("label:" + emailConfig.getGmailLabel());
+        // Formato Gmail: label:"Nombre Etiqueta" para etiquetas con espacios o
+        // caracteres especiales
+        String labelQuery = emailConfig.getGmailLabel().contains(" ") || emailConfig.getGmailLabel().contains("/")
+                ? "label:\"" + emailConfig.getGmailLabel() + "\""
+                : "label:" + emailConfig.getGmailLabel();
+
+        StringBuilder query = new StringBuilder(labelQuery);
         query.append(" has:attachment");
-        query.append(" filename:xml");
 
         if (emailConfig.getLastSyncDate() != null) {
             long timestamp = emailConfig.getLastSyncDate()
@@ -126,6 +131,8 @@ public class EmailExtractionServiceImpl implements EmailExtractionService {
             query.append(" after:").append(timestamp);
         }
 
+        log.info("Gmail query: {}", query.toString());
+
         ListMessagesResponse response = gmailService.users().messages()
                 .list("me")
                 .setQ(query.toString())
@@ -133,6 +140,7 @@ public class EmailExtractionServiceImpl implements EmailExtractionService {
                 .execute();
 
         if (response.getMessages() != null) {
+            log.info("Encontrados {} mensajes con la query", response.getMessages().size());
             for (com.google.api.services.gmail.model.Message msg : response.getMessages()) {
                 // Obtener el mensaje completo con payload
                 Message fullMessage = gmailService.users().messages()
@@ -141,6 +149,8 @@ public class EmailExtractionServiceImpl implements EmailExtractionService {
                         .execute();
                 allMessages.add(fullMessage);
             }
+        } else {
+            log.warn("No se encontraron mensajes con la query: {}", query.toString());
         }
 
         return allMessages;
@@ -148,7 +158,7 @@ public class EmailExtractionServiceImpl implements EmailExtractionService {
 
     private void processMessage(Gmail gmailService, Message message, EmailConfig emailConfig,
             EmailSyncResultDTO result) throws IOException {
-        
+
         MessagePart payload = message.getPayload();
         if (payload == null || payload.getParts() == null) {
             log.warn("Mensaje {} no tiene adjuntos", message.getId());
@@ -171,7 +181,7 @@ public class EmailExtractionServiceImpl implements EmailExtractionService {
 
     private void processAttachment(Gmail gmailService, String messageId, MessagePart part,
             EmailConfig emailConfig, EmailSyncResultDTO result) throws IOException {
-        
+
         String filename = part.getFilename();
         String attachmentId = part.getBody().getAttachmentId();
 
@@ -211,7 +221,7 @@ public class EmailExtractionServiceImpl implements EmailExtractionService {
             Response<InvoiceDTO> invoiceResponse = invoiceService.save(invoiceDTO);
 
             if (invoiceResponse.getStatus() != 200 && invoiceResponse.getStatus() != 201) {
-                result.getErrors().add("Error creando factura " + parsedInvoice.getInvoiceNumber() + 
+                result.getErrors().add("Error creando factura " + parsedInvoice.getInvoiceNumber() +
                         ": " + invoiceResponse.getUserMessage());
                 return;
             }
@@ -223,23 +233,23 @@ public class EmailExtractionServiceImpl implements EmailExtractionService {
             for (ParsedInvoiceItemDTO parsedItem : parsedInvoice.getItems()) {
                 // Buscar o crear item en el catálogo
                 Item catalogItem = itemMatchingService.findOrCreateItem(parsedItem, emailConfig.getProject());
-                
+
                 // Crear invoice item vinculado al catálogo
                 InvoiceItemDTO itemDTO = createInvoiceItemFromParsed(parsedItem, savedInvoice.getId());
                 itemDTO.setItemId(catalogItem.getId());
                 invoiceItemService.save(itemDTO);
-                
-                log.debug("Invoice item creado y vinculado al catálogo. Item ID: {}, Description: {}", 
+
+                log.debug("Invoice item creado y vinculado al catálogo. Item ID: {}, Description: {}",
                         catalogItem.getId(), parsedItem.getDescription());
             }
 
             // Evaluar reglas de asignación
-            Response<ProjectAssignmentResultDTO> assignmentResponse = 
-                    assignmentRuleService.evaluateRulesForInvoice(savedInvoice);
+            Response<ProjectAssignmentResultDTO> assignmentResponse = assignmentRuleService
+                    .evaluateRulesForInvoice(savedInvoice);
 
             if (assignmentResponse.getStatus() == 200 && assignmentResponse.getData() != null) {
                 ProjectAssignmentResultDTO assignmentResult = assignmentResponse.getData();
-                
+
                 if (assignmentResult.getConfidence() >= 70) {
                     // Auto-asignar con alta confianza
                     invoiceService.assignProject(savedInvoice.getId(), assignmentResult.getProjectId());
