@@ -11,7 +11,7 @@
 	</parent>
 	<groupId>com.construmedicis</groupId>
 	<artifactId>buildtracking</artifactId>
-	<version>0.0.2-SNAPSHOT</version>
+	<version>0.0.3-SNAPSHOT</version>
 	<name>buildtracking</name>
 	<description>Un proyecto destinado a servir como backend de una herramienta para constructoras o profesionales que deseen llevar seguimiento a una obra de construcción.</description>
 	<url />
@@ -59,6 +59,22 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
+		</dependency>
+		<!-- Gmail API dependencies -->
+		<dependency>
+			<groupId>com.google.api-client</groupId>
+			<artifactId>google-api-client</artifactId>
+			<version>2.2.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.google.oauth-client</groupId>
+			<artifactId>google-oauth-client-jetty</artifactId>
+			<version>1.34.1</version>
+		</dependency>
+		<dependency>
+			<groupId>com.google.apis</groupId>
+			<artifactId>google-api-services-gmail</artifactId>
+			<version>v1-rev20220404-2.0.0</version>
 		</dependency>
 	</dependencies>
 

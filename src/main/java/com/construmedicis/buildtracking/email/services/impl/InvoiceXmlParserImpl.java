@@ -1,0 +1,232 @@
+package com.construmedicis.buildtracking.email.services.impl;
+
+import java.io.File;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.springframework.stereotype.Service;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+
+import com.construmedicis.buildtracking.email.dto.ParsedInvoiceDTO;
+import com.construmedicis.buildtracking.email.dto.ParsedInvoiceItemDTO;
+import com.construmedicis.buildtracking.email.services.InvoiceXmlParser;
+import com.construmedicis.buildtracking.util.exception.BusinessRuleException;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Service
+@Slf4j
+public class InvoiceXmlParserImpl implements InvoiceXmlParser {
+
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+    @Override
+    public ParsedInvoiceDTO parseXml(File xmlFile) throws IOException {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(xmlFile);
+            doc.getDocumentElement().normalize();
+
+            ParsedInvoiceDTO invoice = new ParsedInvoiceDTO();
+
+            // Número de factura
+            invoice.setInvoiceNumber(getElementValue(doc, "cbc:ID"));
+
+            // Fechas
+            String issueDateStr = getElementValue(doc, "cbc:IssueDate");
+            if (issueDateStr != null && !issueDateStr.isEmpty()) {
+                invoice.setIssueDate(LocalDate.parse(issueDateStr, DATE_FORMATTER));
+            }
+
+            String dueDateStr = getElementValue(doc, "cbc:DueDate");
+            if (dueDateStr != null && !dueDateStr.isEmpty()) {
+                invoice.setDueDate(LocalDate.parse(dueDateStr, DATE_FORMATTER));
+            }
+
+            // Información del proveedor (AccountingSupplierParty)
+            NodeList supplierNodes = doc.getElementsByTagName("cac:AccountingSupplierParty");
+            if (supplierNodes.getLength() > 0) {
+                Element supplierElement = (Element) supplierNodes.item(0);
+                invoice.setSupplierId(getElementValue(supplierElement, "cbc:CompanyID"));
+                
+                Element partyNameElement = (Element) supplierElement.getElementsByTagName("cac:PartyName").item(0);
+                if (partyNameElement != null) {
+                    invoice.setSupplierName(getElementValue(partyNameElement, "cbc:Name"));
+                }
+            }
+
+            // Totales monetarios
+            NodeList monetaryTotalNodes = doc.getElementsByTagName("cac:LegalMonetaryTotal");
+            if (monetaryTotalNodes.getLength() > 0) {
+                Element monetaryElement = (Element) monetaryTotalNodes.item(0);
+                
+                String lineExtensionAmount = getElementValue(monetaryElement, "cbc:LineExtensionAmount");
+                if (lineExtensionAmount != null) {
+                    invoice.setSubtotal(new BigDecimal(lineExtensionAmount));
+                }
+
+                String taxExclusiveAmount = getElementValue(monetaryElement, "cbc:TaxExclusiveAmount");
+                String taxInclusiveAmount = getElementValue(monetaryElement, "cbc:TaxInclusiveAmount");
+                if (taxExclusiveAmount != null && taxInclusiveAmount != null) {
+                    BigDecimal taxExclusive = new BigDecimal(taxExclusiveAmount);
+                    BigDecimal taxInclusive = new BigDecimal(taxInclusiveAmount);
+                    invoice.setTax(taxInclusive.subtract(taxExclusive));
+                }
+
+                String payableAmount = getElementValue(monetaryElement, "cbc:PayableAmount");
+                if (payableAmount != null) {
+                    invoice.setTotal(new BigDecimal(payableAmount));
+                }
+            }
+
+            // Retenciones (WithholdingTaxTotal)
+            NodeList withholdingNodes = doc.getElementsByTagName("cac:WithholdingTaxTotal");
+            if (withholdingNodes.getLength() > 0) {
+                for (int i = 0; i < withholdingNodes.getLength(); i++) {
+                    Element withholdingElement = (Element) withholdingNodes.item(i);
+                    String taxAmount = getElementValue(withholdingElement, "cbc:TaxAmount");
+                    
+                    // Intentar determinar el tipo de retención por el nombre del impuesto
+                    NodeList taxSubtotalNodes = withholdingElement.getElementsByTagName("cac:TaxSubtotal");
+                    if (taxSubtotalNodes.getLength() > 0) {
+                        Element taxSubtotal = (Element) taxSubtotalNodes.item(0);
+                        Element taxCategory = (Element) taxSubtotal.getElementsByTagName("cac:TaxCategory").item(0);
+                        if (taxCategory != null) {
+                            Element taxScheme = (Element) taxCategory.getElementsByTagName("cac:TaxScheme").item(0);
+                            if (taxScheme != null) {
+                                String taxName = getElementValue(taxScheme, "cbc:Name");
+                                if (taxName != null && taxName.contains("ICA")) {
+                                    invoice.setWithholdingICA(new BigDecimal(taxAmount));
+                                } else {
+                                    invoice.setWithholdingTax(new BigDecimal(taxAmount));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Ítems de la factura
+            List<ParsedInvoiceItemDTO> items = parseInvoiceItems(doc);
+            invoice.setItems(items);
+
+            log.info("Factura parseada exitosamente: {}", invoice.getInvoiceNumber());
+            return invoice;
+
+        } catch (Exception e) {
+            log.error("Error parseando XML de factura: {}", e.getMessage(), e);
+            throw new BusinessRuleException("xml.parse.error");
+        }
+    }
+
+    @Override
+    public boolean isValidInvoiceXml(File xmlFile) {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(xmlFile);
+            
+            // Validar elementos básicos que debe tener una factura DIAN
+            String invoiceNumber = getElementValue(doc, "cbc:ID");
+            String issueDate = getElementValue(doc, "cbc:IssueDate");
+            NodeList supplierNodes = doc.getElementsByTagName("cac:AccountingSupplierParty");
+            
+            return invoiceNumber != null && !invoiceNumber.isEmpty() &&
+                   issueDate != null && !issueDate.isEmpty() &&
+                   supplierNodes.getLength() > 0;
+                   
+        } catch (Exception e) {
+            log.warn("Archivo XML no válido: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    private List<ParsedInvoiceItemDTO> parseInvoiceItems(Document doc) {
+        List<ParsedInvoiceItemDTO> items = new ArrayList<>();
+        NodeList invoiceLineNodes = doc.getElementsByTagName("cac:InvoiceLine");
+
+        for (int i = 0; i < invoiceLineNodes.getLength(); i++) {
+            Element lineElement = (Element) invoiceLineNodes.item(i);
+            ParsedInvoiceItemDTO item = new ParsedInvoiceItemDTO();
+
+            // Cantidad
+            String quantity = getElementValue(lineElement, "cbc:InvoicedQuantity");
+            if (quantity != null) {
+                item.setQuantity(new BigDecimal(quantity));
+            }
+
+            // Total de la línea
+            String lineExtension = getElementValue(lineElement, "cbc:LineExtensionAmount");
+            if (lineExtension != null) {
+                item.setLineTotal(new BigDecimal(lineExtension));
+            }
+
+            // Precio unitario
+            NodeList priceNodes = lineElement.getElementsByTagName("cac:Price");
+            if (priceNodes.getLength() > 0) {
+                Element priceElement = (Element) priceNodes.item(0);
+                String priceAmount = getElementValue(priceElement, "cbc:PriceAmount");
+                if (priceAmount != null) {
+                    item.setUnitPrice(new BigDecimal(priceAmount));
+                }
+            }
+
+            // Descripción y código del producto
+            NodeList itemNodes = lineElement.getElementsByTagName("cac:Item");
+            if (itemNodes.getLength() > 0) {
+                Element itemElement = (Element) itemNodes.item(0);
+                item.setDescription(getElementValue(itemElement, "cbc:Description"));
+                
+                NodeList idNodes = itemElement.getElementsByTagName("cbc:ID");
+                if (idNodes.getLength() > 0) {
+                    item.setItemCode(idNodes.item(0).getTextContent());
+                }
+            }
+
+            // Impuestos del ítem
+            NodeList taxTotalNodes = lineElement.getElementsByTagName("cac:TaxTotal");
+            if (taxTotalNodes.getLength() > 0) {
+                Element taxTotalElement = (Element) taxTotalNodes.item(0);
+                String taxAmount = getElementValue(taxTotalElement, "cbc:TaxAmount");
+                if (taxAmount != null) {
+                    item.setTaxAmount(new BigDecimal(taxAmount));
+                }
+            }
+
+            items.add(item);
+        }
+
+        return items;
+    }
+
+    private String getElementValue(Element parent, String tagName) {
+        NodeList nodeList = parent.getElementsByTagName(tagName);
+        if (nodeList.getLength() > 0) {
+            Node node = nodeList.item(0);
+            return node.getTextContent();
+        }
+        return null;
+    }
+
+    private String getElementValue(Document doc, String tagName) {
+        NodeList nodeList = doc.getElementsByTagName(tagName);
+        if (nodeList.getLength() > 0) {
+            Node node = nodeList.item(0);
+            return node.getTextContent();
+        }
+        return null;
+    }
+}

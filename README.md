@@ -1,11 +1,11 @@
 # BuildTracking
 
-BuildTracking es un backend en Java (Spring Boot) para gestionar el seguimiento de obra en proyectos de construcción: empleados, asistencias, participaciones, proyectos e ítems.
+BuildTracking es un backend en Java (Spring Boot) para gestionar el seguimiento de obra en proyectos de construcción: empleados, asistencias, participaciones, proyectos, ítems y **contabilidad por proyecto**.
 
 Este repositorio contiene la implementación de las entidades principales con una arquitectura modular completa (models, dto, repositories, services, controllers) siguiendo las mejores prácticas de desarrollo empresarial.
 
 ## 🧭 Objetivo
-Proveer una API REST robusta para llevar control de recursos humanos con jerarquías organizacionales, participación en proyectos, registro de asistencias, gestión de ítems y consultas personalizadas. La arquitectura está diseñada con manejo de excepciones centralizado, respuestas estandarizadas y separación completa entre DTOs y entidades JPA.
+Proveer una API REST robusta para llevar control de recursos humanos con jerarquías organizacionales, participación en proyectos, registro de asistencias, gestión de ítems, **contabilidad de facturas por proyecto** y consultas personalizadas. La arquitectura está diseñada con manejo de excepciones centralizado, respuestas estandarizadas y separación completa entre DTOs y entidades JPA.
 
 ## 📁 Estructura principal
 - src/main/java/com/construmedicis/buildtracking
@@ -14,6 +14,8 @@ Proveer una API REST robusta para llevar control de recursos humanos con jerarqu
   - participation (participaciones empleado-proyecto)
   - project (proyectos de construcción)
   - item (ítems de proyecto)
+  - **invoice** (facturas con contabilidad)
+  - **assignment** (reglas de asignación automática)
   - util (excepciones, response handler, etc.)
 
 Cada módulo incluye:
@@ -78,8 +80,114 @@ Nota: todos los controladores devuelven un objeto `Response<T>` (status, userMes
 ### Item
   - GET  /api/items
   - GET  /api/items/{id}
+  - GET  /api/items/project/{projectId}  *(ítems de un proyecto - catálogo específico)* 🆕
   - POST /api/items  (body: ItemDTO)
+  - PUT  /api/items/{id}  (body: ItemDTO) *(actualizar nombre, descripción, precio, cantidad)* 🆕
   - DELETE /api/items/{id}
+
+*Características especiales*:
+- **Catálogo dinámico**: Los ítems se crean automáticamente al importar facturas desde Gmail si no existen
+- **Vinculación inteligente**: Sistema de matching que busca ítems existentes por descripción exacta o código
+- **Multi-proyecto**: Un ítem puede asociarse a múltiples proyectos mediante relación ManyToMany
+- **Sincronización con facturas**: Cada `InvoiceItem` se vincula a un `Item` del catálogo mediante `itemId`
+
+### Invoice (Facturas) 💰
+  - GET  /api/invoices
+  - GET  /api/invoices/{id}
+  - GET  /api/invoices/project/{projectId}  *(facturas de un proyecto)*
+  - GET  /api/invoices/status/{paymentStatus}  *(por estado: PENDING, PAID, OVERDUE, CANCELLED)*
+  - GET  /api/invoices/supplier/{supplierId}  *(facturas de un proveedor)*
+  - GET  /api/invoices/date-range?startDate=yyyy-MM-dd&endDate=yyyy-MM-dd  *(por rango de fechas)*
+  - GET  /api/invoices/pending-review?maxConfidence=70  *(facturas con baja confianza en asignación)*
+  - POST /api/invoices  (body: InvoiceDTO)
+  - PUT  /api/invoices/{id}/assign-project?projectId=X  *(asignar proyecto manualmente)*
+  - PUT  /api/invoices/{id}/payment-status?paymentStatus=PAID  *(actualizar estado de pago)*
+  - DELETE /api/invoices/{id}
+
+### InvoiceItem (Líneas de factura)
+  - GET  /api/invoice-items
+  - GET  /api/invoice-items/{id}
+  - GET  /api/invoice-items/invoice/{invoiceId}  *(líneas de una factura)*
+  - GET  /api/invoice-items/item/{itemId}  *(facturas donde se compró un ítem)*
+  - POST /api/invoice-items  (body: InvoiceItemDTO)
+  - DELETE /api/invoice-items/{id}
+
+*Características especiales*:
+- **Precios variables**: Cada línea de factura tiene su propio precio unitario (el mismo ítem puede tener distintos precios en diferentes compras)
+- **Cálculo automático de totales**: El servicio calcula automáticamente el total considerando subtotal, IVA y retenciones
+- **Asignación de confianza**: Sistema de confianza (0-100%) para asignaciones automáticas de proyecto
+- **Estados de pago**: PENDING, PAID, OVERDUE, CANCELLED
+
+### ProjectAssignmentRule (Reglas de asignación automática) 🤖
+  - GET  /api/assignment-rules
+  - GET  /api/assignment-rules/{id}
+  - GET  /api/assignment-rules/project/{projectId}  *(reglas de un proyecto)*
+  - GET  /api/assignment-rules/active  *(solo reglas activas ordenadas por prioridad)*
+  - GET  /api/assignment-rules/type/{ruleType}  *(filtrar por tipo de regla)*
+  - POST /api/assignment-rules  (body: ProjectAssignmentRuleDTO)
+  - POST /api/assignment-rules/evaluate  *(evaluar reglas para una factura)*
+  - PUT  /api/assignment-rules/{id}/toggle?isActive=true  *(activar/desactivar regla)*
+  - DELETE /api/assignment-rules/{id}
+
+*Tipos de reglas disponibles*:
+- **SUPPLIER_NIT**: Asigna por NIT del proveedor (confianza: 95%)
+- **DATE_RANGE**: Asigna por rango de fechas (confianza: 70%)
+- **KEYWORDS**: Asigna por palabras clave en descripciones (confianza: 60-85%)
+- **EMPLOYEE_PARTICIPATION**: Asigna si hay empleados participando en el proyecto (confianza: 75%)
+- **MANUAL**: Siempre requiere confirmación manual
+
+*Flujo de evaluación*:
+1. Se ordenan las reglas activas por prioridad (menor número = mayor prioridad)
+2. Se evalúa cada regla en orden hasta encontrar una coincidencia
+3. Retorna projectId, nombre, confianza y razón de la coincidencia
+4. Si confianza < 70%, la factura queda pendiente de revisión manual
+
+### EmailConfig (Sincronización automática con Gmail) 📧
+  - GET  /api/email-config
+  - GET  /api/email-config/{id}
+  - GET  /api/email-config/project/{projectId}  *(configuración de un proyecto)*
+  - GET  /api/email-config/auto-sync  *(solo configuraciones con auto-sync habilitado)*
+  - POST /api/email-config  (body: EmailConfigDTO)
+  - PUT  /api/email-config/{id}  (body: EmailConfigDTO)
+  - DELETE /api/email-config/{id}
+  - **POST /api/email-config/{id}/sync** 🎯 *(sincronización manual de facturas)*
+
+*Configuración requerida*:
+1. **credentials.json**: Archivo de credenciales OAuth 2.0 de Google Cloud Console
+   - Ubicación: `src/main/resources/credentials.json`
+   - Obtener en: https://console.cloud.google.com/apis/credentials
+   - Habilitar Gmail API en Google Cloud Console
+2. **tokens/**: Directorio donde se almacenan los tokens de acceso (se crea automáticamente en `src/main/resources/tokens/`)
+3. **gmailLabel**: Etiqueta/carpeta de Gmail de donde descargar facturas (ej: "Facturas/Proyecto1")
+
+*Flujo de sincronización automática*:
+1. Usuario llama `POST /api/email-config/{id}/sync`
+2. Sistema autentica con Gmail usando OAuth 2.0
+3. Busca correos con la etiqueta configurada desde `lastSyncDate`
+4. Descarga adjuntos XML (formato DIAN - facturas electrónicas Colombia)
+5. Parsea XML: número, fechas, proveedor, ítems (con código y descripción), subtotal, IVA, retenciones, total
+6. **Para cada ítem de la factura**:
+   - Busca en catálogo por descripción exacta o código
+   - Si existe: vincula `InvoiceItem.itemId` al `Item` encontrado
+   - Si NO existe: crea nuevo `Item` automáticamente en el catálogo
+   - Asocia el ítem al proyecto de la configuración
+7. Crea `Invoice` con `source=EMAIL_AUTO` y `InvoiceItem`s vinculados en BD
+8. Evalúa reglas de asignación automática:
+   - Si confianza ≥ 70%: asigna automáticamente al proyecto
+   - Si confianza < 70%: marca para revisión manual
+9. **Elimina archivo XML temporal** (no se almacenan archivos, solo datos en BD)
+10. Actualiza `lastSyncDate`
+11. Retorna estadísticas: emails procesados, facturas creadas, auto-asignadas, pendientes de revisión
+
+*Características*:
+- **Procesamiento efímero**: Los archivos XML se eliminan inmediatamente después de extraer los datos
+- **Catálogo automático**: Los ítems nuevos se agregan al catálogo sin intervención manual
+- **Vinculación inteligente**: Sistema de matching con 3 estrategias (descripción exacta → código en nombre → crear nuevo)
+- **OAuth 2.0**: Autenticación segura con tokens renovables (primera vez abre navegador para autorizar)
+- **Sincronización incremental**: Solo procesa correos nuevos desde `lastSyncDate`
+- **Auto-sync opcional**: Flag `autoSyncEnabled` para programar sincronizaciones automáticas con scheduler
+- **Validación XML**: Verifica formato DIAN antes de procesar
+- **Trazabilidad**: Campo `source=EMAIL_AUTO` identifica facturas importadas automáticamente
 
 ## 🔐 Manejo de errores y respuestas
 El proyecto implementa un sistema robusto de manejo de errores y respuestas estandarizadas:
@@ -91,7 +199,7 @@ El proyecto implementa un sistema robusto de manejo de errores y respuestas esta
 ## 📦 Versionado
 El proyecto usa **versionado semántico (SemVer)** y está configurado con automatización de releases mediante GitHub Actions.
 
-**Versión actual**: `0.0.2-SNAPSHOT` (ver archivo `VERSION`)
+**Versión actual**: `0.0.3-SNAPSHOT` (ver archivo `VERSION`)
 
 *Formato:* MAJOR.MINOR.PATCH
 

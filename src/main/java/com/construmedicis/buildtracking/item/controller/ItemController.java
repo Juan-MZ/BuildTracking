@@ -34,6 +34,16 @@ public class ItemController {
         return ResponseEntity.status(201).body(service.save(dto));
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<Response<ItemDTO>> update(@PathVariable Long id, @RequestBody ItemDTO dto) {
+        return ResponseEntity.ok(service.update(id, dto));
+    }
+
+    @GetMapping("/project/{projectId}")
+    public ResponseEntity<Response<List<ItemDTO>>> getByProjectId(@PathVariable Long projectId) {
+        return ResponseEntity.ok(service.findByProjectId(projectId));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Response<Void>> delete(@PathVariable Long id) {
         return ResponseEntity.ok(service.deleteById(id));

@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Gmail API Credentials ###
+credentials.json
+tokens/
+src/main/resources/credentials.json
+src/main/resources/tokens/
