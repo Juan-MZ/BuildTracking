@@ -11,8 +11,8 @@ import com.construmedicis.buildtracking.item.models.Item;
 public interface ItemRepository extends JpaRepository<Item, Long> {
 
     List<Item> findByProjects_Id(Long projectId);
-    
+
     Optional<Item> findByNameContainingIgnoreCase(String name);
-    
+
     Optional<Item> findByDescription(String description);
 }

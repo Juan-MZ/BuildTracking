@@ -18,7 +18,8 @@ public interface InvoiceXmlParser {
     ParsedInvoiceDTO parseXml(File xmlFile) throws IOException;
 
     /**
-     * Valida que un archivo XML tenga el formato correcto de factura electrónica DIAN.
+     * Valida que un archivo XML tenga el formato correcto de factura electrónica
+     * DIAN.
      * 
      * @param xmlFile Archivo XML a validar
      * @return true si el archivo es válido, false en caso contrario

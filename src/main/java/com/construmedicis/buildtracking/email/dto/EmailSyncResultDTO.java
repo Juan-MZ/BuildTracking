@@ -13,6 +13,7 @@ public class EmailSyncResultDTO {
 
     private Integer emailsProcessed;
     private Integer invoicesCreated;
+    private Integer invoicesUpdated;
     private Integer invoicesAutoAssigned;
     private Integer invoicesPendingReview;
     private List<String> errors;

@@ -61,11 +61,11 @@ public class GmailAuthServiceImpl implements GmailAuthService {
 
     private Credential getCredentials(final NetHttpTransport httpTransport, String credentialsPath,
             String tokensDirectoryPath) throws IOException {
-        
+
         // Cargar client secrets desde el archivo credentials.json
         GoogleClientSecrets clientSecrets;
         try (FileInputStream in = new FileInputStream(credentialsPath);
-             InputStreamReader reader = new InputStreamReader(in)) {
+                InputStreamReader reader = new InputStreamReader(in)) {
             clientSecrets = GoogleClientSecrets.load(JSON_FACTORY, reader);
         }
 

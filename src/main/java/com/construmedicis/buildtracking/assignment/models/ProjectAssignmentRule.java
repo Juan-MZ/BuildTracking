@@ -36,7 +36,7 @@ public class ProjectAssignmentRule {
     private String supplierNit; // Para SUPPLIER_NIT
 
     private LocalDate startDate; // Para DATE_RANGE
-    private LocalDate endDate;   // Para DATE_RANGE
+    private LocalDate endDate; // Para DATE_RANGE
 
     @Column(columnDefinition = "TEXT")
     private String keywords; // JSON array para KEYWORDS, ej: ["cemento", "acero"]
@@ -48,10 +48,10 @@ public class ProjectAssignmentRule {
     private String description; // Descripción de la regla para el usuario
 
     public enum RuleType {
-        SUPPLIER_NIT,         // Asignar basado en NIT del proveedor
-        DATE_RANGE,           // Asignar basado en rango de fechas de la factura
-        KEYWORDS,             // Asignar basado en palabras clave en descripción de ítems
+        SUPPLIER_NIT, // Asignar basado en NIT del proveedor
+        DATE_RANGE, // Asignar basado en rango de fechas de la factura
+        KEYWORDS, // Asignar basado en palabras clave en descripción de ítems
         EMPLOYEE_PARTICIPATION, // Asignar si hay empleados participando en el proyecto en esa fecha
-        MANUAL                // Regla manual (siempre requiere confirmación)
+        MANUAL // Regla manual (siempre requiere confirmación)
     }
 }

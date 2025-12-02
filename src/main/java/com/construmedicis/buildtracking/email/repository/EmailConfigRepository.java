@@ -12,6 +12,6 @@ import com.construmedicis.buildtracking.email.models.EmailConfig;
 public interface EmailConfigRepository extends JpaRepository<EmailConfig, Long> {
 
     Optional<EmailConfig> findByProjectId(Long projectId);
-    
+
     List<EmailConfig> findByAutoSyncEnabledTrue();
 }

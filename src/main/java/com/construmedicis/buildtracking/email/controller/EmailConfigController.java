@@ -98,21 +98,20 @@ public class EmailConfigController {
     @PostMapping("/{id}/sync")
     public ResponseEntity<Response<EmailSyncResultDTO>> syncEmails(@PathVariable Long id) {
         EmailSyncResultDTO result = emailConfigService.syncEmails(id);
-        
+
         String message = String.format(
                 "Sync completed: %s. Processed %d emails, created %d invoices (%d auto-assigned, %d pending review)",
                 result.getSyncStatus(),
                 result.getEmailsProcessed(),
                 result.getInvoicesCreated(),
                 result.getInvoicesAutoAssigned(),
-                result.getInvoicesPendingReview()
-        );
-        
+                result.getInvoicesPendingReview());
+
         Response<EmailSyncResultDTO> response = new Response<>();
         response.setStatus("SUCCESS".equals(result.getSyncStatus()) ? 200 : 206);
         response.setUserMessage(message);
         response.setData(result);
-        
+
         return ResponseEntity.ok(response);
     }
 }

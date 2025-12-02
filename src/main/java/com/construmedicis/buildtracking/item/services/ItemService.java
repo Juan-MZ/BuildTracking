@@ -11,9 +11,9 @@ public interface ItemService {
     Response<ItemDTO> findById(Long id);
 
     Response<ItemDTO> save(ItemDTO item);
-    
+
     Response<ItemDTO> update(Long id, ItemDTO itemDTO);
-    
+
     Response<List<ItemDTO>> findByProjectId(Long projectId);
 
     Response<Void> deleteById(Long id);

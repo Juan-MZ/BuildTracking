@@ -58,8 +58,8 @@ public class EmailConfigServiceImpl implements EmailConfigService {
         EmailConfig emailConfig = emailConfigRepository.findById(id)
                 .orElseThrow(() -> new BusinessRuleException("email.config.not.found"));
 
-        if (emailConfigDTO.getProjectId() != null && 
-            !emailConfig.getProject().getId().equals(emailConfigDTO.getProjectId())) {
+        if (emailConfigDTO.getProjectId() != null &&
+                !emailConfig.getProject().getId().equals(emailConfigDTO.getProjectId())) {
             Project project = projectRepository.findById(emailConfigDTO.getProjectId())
                     .orElseThrow(() -> new BusinessRuleException("project.not.found"));
             emailConfig.setProject(project);

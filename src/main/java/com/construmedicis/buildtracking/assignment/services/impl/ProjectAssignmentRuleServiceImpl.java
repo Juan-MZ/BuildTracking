@@ -30,9 +30,9 @@ public class ProjectAssignmentRuleServiceImpl implements ProjectAssignmentRuleSe
     private final ParticipationRepository participationRepository;
 
     public ProjectAssignmentRuleServiceImpl(ProjectAssignmentRuleRepository repository,
-                                           ProjectRepository projectRepository,
-                                           InvoiceItemRepository invoiceItemRepository,
-                                           ParticipationRepository participationRepository) {
+            ProjectRepository projectRepository,
+            InvoiceItemRepository invoiceItemRepository,
+            ParticipationRepository participationRepository) {
         this.repository = repository;
         this.projectRepository = projectRepository;
         this.invoiceItemRepository = invoiceItemRepository;
@@ -48,14 +48,16 @@ public class ProjectAssignmentRuleServiceImpl implements ProjectAssignmentRuleSe
 
         ProjectAssignmentRule rule = fromDTO(ruleDTO);
         ProjectAssignmentRule saved = repository.save(rule);
-        return new ResponseHandler<>(201, "Assignment rule created", "/api/assignment-rules", toDTO(saved)).getResponse();
+        return new ResponseHandler<>(201, "Assignment rule created", "/api/assignment-rules", toDTO(saved))
+                .getResponse();
     }
 
     @Override
     public Response<ProjectAssignmentRuleDTO> findById(Long id) {
         ProjectAssignmentRule rule = repository.findById(id)
                 .orElseThrow(() -> new BusinessRuleException("assignment.rule.not.found"));
-        return new ResponseHandler<>(200, "Assignment rule found", "/api/assignment-rules/{id}", toDTO(rule)).getResponse();
+        return new ResponseHandler<>(200, "Assignment rule found", "/api/assignment-rules/{id}", toDTO(rule))
+                .getResponse();
     }
 
     @Override
@@ -73,7 +75,8 @@ public class ProjectAssignmentRuleServiceImpl implements ProjectAssignmentRuleSe
             throw new BusinessRuleException("assignment.rule.not.found");
         }
         repository.deleteById(id);
-        return new ResponseHandler<Void>(200, "Assignment rule deleted", "/api/assignment-rules/{id}", null).getResponse();
+        return new ResponseHandler<Void>(200, "Assignment rule deleted", "/api/assignment-rules/{id}", null)
+                .getResponse();
     }
 
     @Override
@@ -84,7 +87,8 @@ public class ProjectAssignmentRuleServiceImpl implements ProjectAssignmentRuleSe
         List<ProjectAssignmentRuleDTO> rules = repository.findByProjectId(projectId).stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
-        return new ResponseHandler<>(200, "Assignment rules found", "/api/assignment-rules/project/{projectId}", rules).getResponse();
+        return new ResponseHandler<>(200, "Assignment rules found", "/api/assignment-rules/project/{projectId}", rules)
+                .getResponse();
     }
 
     @Override
@@ -100,7 +104,8 @@ public class ProjectAssignmentRuleServiceImpl implements ProjectAssignmentRuleSe
         List<ProjectAssignmentRuleDTO> rules = repository.findByRuleTypeAndIsActiveTrue(ruleType).stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
-        return new ResponseHandler<>(200, "Rules found by type", "/api/assignment-rules/type/{ruleType}", rules).getResponse();
+        return new ResponseHandler<>(200, "Rules found by type", "/api/assignment-rules/type/{ruleType}", rules)
+                .getResponse();
     }
 
     @Override
@@ -110,7 +115,8 @@ public class ProjectAssignmentRuleServiceImpl implements ProjectAssignmentRuleSe
         for (ProjectAssignmentRule rule : activeRules) {
             ProjectAssignmentResultDTO result = evaluateSingleRule(rule, invoiceDTO);
             if (result != null && result.getConfidence() > 0) {
-                return new ResponseHandler<>(200, "Project assignment evaluated", "/api/assignment-rules/evaluate", result).getResponse();
+                return new ResponseHandler<>(200, "Project assignment evaluated", "/api/assignment-rules/evaluate",
+                        result).getResponse();
             }
         }
 
@@ -123,7 +129,8 @@ public class ProjectAssignmentRuleServiceImpl implements ProjectAssignmentRuleSe
                 .matchReason("No se encontró ninguna regla que coincida con esta factura")
                 .build();
 
-        return new ResponseHandler<>(200, "No matching rule found", "/api/assignment-rules/evaluate", noMatch).getResponse();
+        return new ResponseHandler<>(200, "No matching rule found", "/api/assignment-rules/evaluate", noMatch)
+                .getResponse();
     }
 
     @Override
@@ -131,10 +138,11 @@ public class ProjectAssignmentRuleServiceImpl implements ProjectAssignmentRuleSe
     public Response<ProjectAssignmentRuleDTO> toggleActive(Long id, Boolean isActive) {
         ProjectAssignmentRule rule = repository.findById(id)
                 .orElseThrow(() -> new BusinessRuleException("assignment.rule.not.found"));
-        
+
         rule.setIsActive(isActive);
         ProjectAssignmentRule updated = repository.save(rule);
-        return new ResponseHandler<>(200, "Rule status updated", "/api/assignment-rules/{id}/toggle", toDTO(updated)).getResponse();
+        return new ResponseHandler<>(200, "Rule status updated", "/api/assignment-rules/{id}/toggle", toDTO(updated))
+                .getResponse();
     }
 
     private ProjectAssignmentResultDTO evaluateSingleRule(ProjectAssignmentRule rule, InvoiceDTO invoice) {
@@ -169,7 +177,7 @@ public class ProjectAssignmentRuleServiceImpl implements ProjectAssignmentRuleSe
                             .stream()
                             .map(String::trim)
                             .collect(Collectors.toList());
-                    
+
                     long matchCount = invoiceItemRepository.findByInvoiceId(invoice.getId()).stream()
                             .filter(item -> {
                                 String desc = item.getDescription().toLowerCase();
@@ -179,7 +187,7 @@ public class ProjectAssignmentRuleServiceImpl implements ProjectAssignmentRuleSe
 
                     if (matchCount > 0) {
                         matches = true;
-                        confidence = Math.min(60 + (int)(matchCount * 10), 85); // 60-85% según matches
+                        confidence = Math.min(60 + (int) (matchCount * 10), 85); // 60-85% según matches
                         matchReason = "Encontradas " + matchCount + " palabra(s) clave en las líneas de factura";
                     }
                 }
@@ -218,7 +226,8 @@ public class ProjectAssignmentRuleServiceImpl implements ProjectAssignmentRuleSe
     }
 
     private ProjectAssignmentRuleDTO toDTO(ProjectAssignmentRule rule) {
-        if (rule == null) return null;
+        if (rule == null)
+            return null;
         return ProjectAssignmentRuleDTO.builder()
                 .id(rule.getId())
                 .projectId(rule.getProject() != null ? rule.getProject().getId() : null)

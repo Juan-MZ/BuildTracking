@@ -249,6 +249,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         EmailSyncResultDTO result = EmailSyncResultDTO.builder()
                 .emailsProcessed(0)
                 .invoicesCreated(0)
+                .invoicesUpdated(0)
                 .invoicesAutoAssigned(0)
                 .invoicesPendingReview(0)
                 .errors(new ArrayList<>())
@@ -283,14 +284,16 @@ public class InvoiceServiceImpl implements InvoiceService {
             // Determinar estado final
             if (result.getErrors().isEmpty()) {
                 result.setSyncStatus("SUCCESS");
-            } else if (result.getInvoicesCreated() > 0) {
+            } else if (result.getInvoicesCreated() > 0 || result.getInvoicesUpdated() > 0) {
                 result.setSyncStatus("PARTIAL_SUCCESS");
             } else {
                 result.setSyncStatus("FAILED");
             }
 
-            log.info("Sincronización completada: {} facturas creadas, {} auto-asignadas, {} pendientes revisión",
-                    result.getInvoicesCreated(), result.getInvoicesAutoAssigned(), result.getInvoicesPendingReview());
+            log.info(
+                    "Sincronización completada: {} creadas, {} actualizadas, {} auto-asignadas, {} pendientes revisión",
+                    result.getInvoicesCreated(), result.getInvoicesUpdated(),
+                    result.getInvoicesAutoAssigned(), result.getInvoicesPendingReview());
 
         } catch (Exception e) {
             log.error("Error en sincronización desde Gmail: {}", e.getMessage(), e);
@@ -492,21 +495,29 @@ public class InvoiceServiceImpl implements InvoiceService {
             boolean isUpdate = false;
 
             if (existingInvoice.isPresent()) {
-                // Factura existe - actualizar con nueva información (corrección)
-                log.info("Factura {} ya existe (ID: {}), actualizando con corrección",
-                        parsedInvoice.getInvoiceNumber(), existingInvoice.get().getId());
-
+                // Factura existe - verificar si hay cambios
                 Invoice invoice = existingInvoice.get();
-                updateInvoiceFromParsed(invoice, parsedInvoice);
 
-                // Eliminar items antiguos
-                invoiceItemService.deleteByInvoiceId(invoice.getId());
+                if (hasInvoiceChanged(invoice, parsedInvoice)) {
+                    // Hay cambios - actualizar con nueva información (corrección)
+                    log.info("Factura {} ya existe (ID: {}), actualizando con corrección",
+                            parsedInvoice.getInvoiceNumber(), invoice.getId());
 
-                savedInvoice = invoiceRepository.save(invoice);
-                isUpdate = true;
-                result.setInvoicesCreated(result.getInvoicesCreated() + 1); // Contador incluye actualizaciones
+                    updateInvoiceFromParsed(invoice, parsedInvoice);
 
-                log.info("Factura {} actualizada exitosamente", parsedInvoice.getInvoiceNumber());
+                    // Eliminar items antiguos
+                    invoiceItemService.deleteByInvoiceId(invoice.getId());
+
+                    savedInvoice = invoiceRepository.save(invoice);
+                    isUpdate = true;
+                    result.setInvoicesUpdated(result.getInvoicesUpdated() + 1);
+
+                    log.info("Factura {} actualizada exitosamente", parsedInvoice.getInvoiceNumber());
+                } else {
+                    // Sin cambios - omitir actualización
+                    log.info("Factura {} ya existe sin cambios, omitiendo", parsedInvoice.getInvoiceNumber());
+                    return; // Salir sin procesar
+                }
             } else {
                 // Crear nueva factura
                 InvoiceDTO invoiceDTO = createInvoiceFromParsed(parsedInvoice, xmlFile.getAbsolutePath());
@@ -652,21 +663,29 @@ public class InvoiceServiceImpl implements InvoiceService {
             boolean isUpdate = false;
 
             if (existingInvoice.isPresent()) {
-                // Factura existe - actualizar con nueva información (corrección)
-                log.info("Factura {} ya existe (ID: {}), actualizando con corrección",
-                        parsedInvoice.getInvoiceNumber(), existingInvoice.get().getId());
-
+                // Factura existe - verificar si hay cambios
                 Invoice invoice = existingInvoice.get();
-                updateInvoiceFromParsed(invoice, parsedInvoice);
 
-                // Eliminar items antiguos
-                invoiceItemService.deleteByInvoiceId(invoice.getId());
+                if (hasInvoiceChanged(invoice, parsedInvoice)) {
+                    // Hay cambios - actualizar con nueva información (corrección)
+                    log.info("Factura {} ya existe (ID: {}), actualizando con corrección",
+                            parsedInvoice.getInvoiceNumber(), invoice.getId());
 
-                savedInvoice = invoiceRepository.save(invoice);
-                isUpdate = true;
-                result.setInvoicesCreated(result.getInvoicesCreated() + 1); // Contador incluye actualizaciones
+                    updateInvoiceFromParsed(invoice, parsedInvoice);
 
-                log.info("Factura {} actualizada exitosamente", parsedInvoice.getInvoiceNumber());
+                    // Eliminar items antiguos
+                    invoiceItemService.deleteByInvoiceId(invoice.getId());
+
+                    savedInvoice = invoiceRepository.save(invoice);
+                    isUpdate = true;
+                    result.setInvoicesUpdated(result.getInvoicesUpdated() + 1);
+
+                    log.info("Factura {} actualizada exitosamente", parsedInvoice.getInvoiceNumber());
+                } else {
+                    // Sin cambios - omitir actualización
+                    log.info("Factura {} ya existe sin cambios, omitiendo", parsedInvoice.getInvoiceNumber());
+                    return; // Salir sin procesar
+                }
             } else {
                 // Crear nueva factura
                 InvoiceDTO invoiceDTO = createInvoiceFromParsed(parsedInvoice, tempFile.getAbsolutePath());
@@ -758,6 +777,37 @@ public class InvoiceServiceImpl implements InvoiceService {
                 }
             }
         }
+    }
+
+    /**
+     * Verifica si los datos parseados son diferentes a la factura existente.
+     * Retorna true si hay cambios que ameriten actualizar.
+     */
+    private boolean hasInvoiceChanged(Invoice existing, ParsedInvoiceDTO parsed) {
+        // Normalizar valores null a BigDecimal.ZERO para comparación
+        BigDecimal existingWithholdingTax = existing.getWithholdingTax() != null
+                ? existing.getWithholdingTax()
+                : BigDecimal.ZERO;
+        BigDecimal parsedWithholdingTax = parsed.getWithholdingTax() != null
+                ? parsed.getWithholdingTax()
+                : BigDecimal.ZERO;
+        BigDecimal existingWithholdingICA = existing.getWithholdingICA() != null
+                ? existing.getWithholdingICA()
+                : BigDecimal.ZERO;
+        BigDecimal parsedWithholdingICA = parsed.getWithholdingICA() != null
+                ? parsed.getWithholdingICA()
+                : BigDecimal.ZERO;
+
+        // Comparar campos principales
+        return !existing.getIssueDate().equals(parsed.getIssueDate())
+                || !existing.getDueDate().equals(parsed.getDueDate())
+                || !existing.getSupplierId().equals(parsed.getSupplierId())
+                || !existing.getSupplierName().equals(parsed.getSupplierName())
+                || existing.getSubtotal().compareTo(parsed.getSubtotal()) != 0
+                || existing.getTax().compareTo(parsed.getTax()) != 0
+                || existingWithholdingTax.compareTo(parsedWithholdingTax) != 0
+                || existingWithholdingICA.compareTo(parsedWithholdingICA) != 0
+                || existing.getTotal().compareTo(parsed.getTotal()) != 0;
     }
 
     /**

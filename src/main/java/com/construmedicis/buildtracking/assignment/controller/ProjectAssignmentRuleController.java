@@ -57,7 +57,8 @@ public class ProjectAssignmentRuleController {
     }
 
     @PostMapping("/evaluate")
-    public ResponseEntity<Response<ProjectAssignmentResultDTO>> evaluateRulesForInvoice(@RequestBody InvoiceDTO invoiceDTO) {
+    public ResponseEntity<Response<ProjectAssignmentResultDTO>> evaluateRulesForInvoice(
+            @RequestBody InvoiceDTO invoiceDTO) {
         return ResponseEntity.ok(service.evaluateRulesForInvoice(invoiceDTO));
     }
 
