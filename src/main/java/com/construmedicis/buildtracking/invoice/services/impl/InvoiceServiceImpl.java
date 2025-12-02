@@ -17,6 +17,7 @@ import com.construmedicis.buildtracking.invoice.services.InvoiceItemService;
 import com.construmedicis.buildtracking.invoice.services.InvoiceService;
 import com.construmedicis.buildtracking.item.models.Item;
 import com.construmedicis.buildtracking.item.services.ItemMatchingService;
+import com.construmedicis.buildtracking.item.services.ItemService;
 import com.construmedicis.buildtracking.project.models.Project;
 import com.construmedicis.buildtracking.project.repository.ProjectRepository;
 import com.construmedicis.buildtracking.util.exception.BusinessRuleException;
@@ -60,6 +61,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     private final InvoiceItemService invoiceItemService;
     private final ItemMatchingService itemMatchingService;
     private final ProjectAssignmentRuleService assignmentRuleService;
+    private final ItemService itemService;
 
     private static final String TEMP_DIR = System.getProperty("java.io.tmpdir") + "/buildtracking_invoices/";
 
@@ -69,7 +71,8 @@ public class InvoiceServiceImpl implements InvoiceService {
             InvoiceXmlParser xmlParser,
             InvoiceItemService invoiceItemService,
             ItemMatchingService itemMatchingService,
-            ProjectAssignmentRuleService assignmentRuleService) {
+            ProjectAssignmentRuleService assignmentRuleService,
+            ItemService itemService) {
         this.invoiceRepository = invoiceRepository;
         this.projectRepository = projectRepository;
         this.gmailAuthService = gmailAuthService;
@@ -77,6 +80,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         this.invoiceItemService = invoiceItemService;
         this.itemMatchingService = itemMatchingService;
         this.assignmentRuleService = assignmentRuleService;
+        this.itemService = itemService;
     }
 
     @Override
@@ -183,8 +187,51 @@ public class InvoiceServiceImpl implements InvoiceService {
         // Asociar los items de la factura al proyecto
         associateInvoiceItemsToProject(invoice, project);
 
+        // Actualizar stock de cada item de la factura
+        updateStockForInvoiceItems(invoice);
+
         return new ResponseHandler<>(200, "Project assigned to invoice", "/api/invoices/{id}/assign-project",
                 toDTO(updatedInvoice)).getResponse();
+    }
+
+    @Override
+    @Transactional
+    public Response<InvoiceDTO> unassignProject(Long invoiceId) {
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new BusinessRuleException("invoice.not.found"));
+
+        if (invoice.getProject() == null) {
+            throw new BusinessRuleException("invoice.not.assigned");
+        }
+
+        // Desasignar proyecto
+        invoice.setProject(null);
+        invoice.setAssignmentConfidence(0);
+
+        Invoice updatedInvoice = invoiceRepository.save(invoice);
+
+        // Actualizar stock de cada item (se reducirá porque ya no está asignado)
+        updateStockForInvoiceItems(invoice);
+
+        return new ResponseHandler<>(200, "Project unassigned from invoice", "/api/invoices/{id}/unassign-project",
+                toDTO(updatedInvoice)).getResponse();
+    }
+
+    /**
+     * Actualiza el stock de todos los items de una factura.
+     * El stock se recalcula sumando solo las cantidades de facturas asignadas a
+     * proyectos.
+     */
+    private void updateStockForInvoiceItems(Invoice invoice) {
+        if (invoice.getInvoiceItems() == null || invoice.getInvoiceItems().isEmpty()) {
+            return;
+        }
+
+        for (InvoiceItem invoiceItem : invoice.getInvoiceItems()) {
+            if (invoiceItem.getItem() != null) {
+                itemService.updateItemStock(invoiceItem.getItem().getId());
+            }
+        }
     }
 
     private void calculateTotals(InvoiceDTO invoiceDTO) {
@@ -758,6 +805,11 @@ public class InvoiceServiceImpl implements InvoiceService {
      * Asocia los items de una factura existente a un proyecto.
      * Se usa cuando se asigna manualmente una factura a un proyecto.
      */
+    /**
+     * Actualiza el stock de todos los items de una factura.
+     * El stock se recalcula sumando solo las cantidades de facturas asignadas a
+     * proyectos.
+     */
     private void associateInvoiceItemsToProject(Invoice invoice, Project project) {
         if (invoice.getInvoiceItems() == null || invoice.getInvoiceItems().isEmpty()) {
             log.warn("Factura {} no tiene items para asociar al proyecto {}",
@@ -800,7 +852,7 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         // Comparar campos principales
         return !existing.getIssueDate().equals(parsed.getIssueDate())
-                || !existing.getDueDate().equals(parsed.getDueDate())
+                || !java.util.Objects.equals(existing.getDueDate(), parsed.getDueDate()) // dueDate puede ser null
                 || !existing.getSupplierId().equals(parsed.getSupplierId())
                 || !existing.getSupplierName().equals(parsed.getSupplierName())
                 || existing.getSubtotal().compareTo(parsed.getSubtotal()) != 0

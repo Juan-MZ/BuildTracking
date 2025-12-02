@@ -2,6 +2,8 @@ package com.construmedicis.buildtracking.item.services.impl;
 
 import org.springframework.stereotype.Service;
 
+import com.construmedicis.buildtracking.invoice.models.InvoiceItem;
+import com.construmedicis.buildtracking.invoice.repository.InvoiceItemRepository;
 import com.construmedicis.buildtracking.item.dto.ItemDTO;
 import com.construmedicis.buildtracking.item.models.Item;
 import com.construmedicis.buildtracking.item.repository.ItemRepository;
@@ -11,6 +13,7 @@ import com.construmedicis.buildtracking.util.exception.BusinessRuleException;
 import com.construmedicis.buildtracking.util.response.Response;
 import com.construmedicis.buildtracking.util.response.handler.ResponseHandler;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -20,10 +23,13 @@ public class ItemServiceImpl implements ItemService {
 
     private final ItemRepository repository;
     private final ProjectRepository projectRepository;
+    private final InvoiceItemRepository invoiceItemRepository;
 
-    public ItemServiceImpl(ItemRepository repository, ProjectRepository projectRepository) {
+    public ItemServiceImpl(ItemRepository repository, ProjectRepository projectRepository,
+            InvoiceItemRepository invoiceItemRepository) {
         this.repository = repository;
         this.projectRepository = projectRepository;
+        this.invoiceItemRepository = invoiceItemRepository;
     }
 
     private Item fromDTO(ItemDTO dto) {
@@ -109,6 +115,26 @@ public class ItemServiceImpl implements ItemService {
             throw new BusinessRuleException("item.not.found");
         repository.deleteById(id);
         return new ResponseHandler<Void>(200, "Item deleted", "/api/items/{id}", null).getResponse();
+    }
+
+    @Override
+    public void updateItemStock(Long itemId) {
+        // Buscar todos los invoice items asociados a este item
+        List<InvoiceItem> invoiceItems = invoiceItemRepository.findByItemId(itemId);
+
+        // Sumar las cantidades SOLO de invoice items cuyas facturas estén asignadas a
+        // un proyecto
+        BigDecimal totalQuantity = invoiceItems.stream()
+                .filter(invoiceItem -> invoiceItem.getInvoice() != null
+                        && invoiceItem.getInvoice().getProject() != null)
+                .map(InvoiceItem::getQuantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Actualizar el stock del item en el catálogo
+        Item item = repository.findById(itemId)
+                .orElseThrow(() -> new BusinessRuleException("item.not.found"));
+        item.setQuantity(totalQuantity.intValue());
+        repository.save(item);
     }
 
     private ItemDTO toDTO(Item i) {

@@ -17,4 +17,10 @@ public interface ItemService {
     Response<List<ItemDTO>> findByProjectId(Long projectId);
 
     Response<Void> deleteById(Long id);
+
+    /**
+     * Recalcula y actualiza el stock (quantity) de un item
+     * sumando las cantidades de todos sus invoice items.
+     */
+    void updateItemStock(Long itemId);
 }

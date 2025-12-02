@@ -71,6 +71,11 @@ public class InvoiceController {
         return ResponseEntity.ok(service.assignProject(id, projectId));
     }
 
+    @PutMapping("/{id}/unassign-project")
+    public ResponseEntity<Response<InvoiceDTO>> unassignProject(@PathVariable Long id) {
+        return ResponseEntity.ok(service.unassignProject(id));
+    }
+
     /**
      * Sincroniza facturas desde Gmail.
      * Descarga XMLs de la etiqueta especificada, verifica duplicados,

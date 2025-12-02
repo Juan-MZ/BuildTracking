@@ -27,6 +27,8 @@ public interface InvoiceService {
 
     Response<InvoiceDTO> assignProject(Long invoiceId, Long projectId);
 
+    Response<InvoiceDTO> unassignProject(Long invoiceId);
+
     /**
      * Sincroniza facturas desde Gmail con la etiqueta especificada y rango de
      * fechas opcional.
