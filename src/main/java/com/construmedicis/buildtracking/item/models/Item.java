@@ -25,8 +25,6 @@ public class Item {
     private String name;
     @Column(name = "item_description")
     private String description;
-    @Column(name = "item_price")
-    private Double price;
     @Column(name = "item_quantity")
     private Integer quantity;
 

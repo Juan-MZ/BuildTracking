@@ -2,7 +2,6 @@ package com.construmedicis.buildtracking.invoice.controller;
 
 import com.construmedicis.buildtracking.email.dto.EmailSyncResultDTO;
 import com.construmedicis.buildtracking.invoice.dto.InvoiceDTO;
-import com.construmedicis.buildtracking.invoice.models.Invoice.PaymentStatus;
 import com.construmedicis.buildtracking.invoice.services.InvoiceService;
 import com.construmedicis.buildtracking.util.response.Response;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -47,11 +46,6 @@ public class InvoiceController {
         return ResponseEntity.ok(service.findByProjectId(projectId));
     }
 
-    @GetMapping("/status/{paymentStatus}")
-    public ResponseEntity<Response<List<InvoiceDTO>>> getByPaymentStatus(@PathVariable PaymentStatus paymentStatus) {
-        return ResponseEntity.ok(service.findByPaymentStatus(paymentStatus));
-    }
-
     @GetMapping("/supplier/{supplierId}")
     public ResponseEntity<Response<List<InvoiceDTO>>> getBySupplierId(@PathVariable String supplierId) {
         return ResponseEntity.ok(service.findBySupplierId(supplierId));
@@ -75,13 +69,6 @@ public class InvoiceController {
             @PathVariable Long id,
             @RequestParam Long projectId) {
         return ResponseEntity.ok(service.assignProject(id, projectId));
-    }
-
-    @PutMapping("/{id}/payment-status")
-    public ResponseEntity<Response<InvoiceDTO>> updatePaymentStatus(
-            @PathVariable Long id,
-            @RequestParam PaymentStatus paymentStatus) {
-        return ResponseEntity.ok(service.updatePaymentStatus(id, paymentStatus));
     }
 
     /**

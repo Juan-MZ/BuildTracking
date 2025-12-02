@@ -95,31 +95,33 @@ Nota: todos los controladores devuelven un objeto `Response<T>` (status, userMes
   - GET  /api/invoices
   - GET  /api/invoices/{id}
   - GET  /api/invoices/project/{projectId}  *(facturas de un proyecto)*
-  - GET  /api/invoices/status/{paymentStatus}  *(por estado: PENDING, PAID, OVERDUE, CANCELLED)*
   - GET  /api/invoices/supplier/{supplierId}  *(facturas de un proveedor)*
   - GET  /api/invoices/date-range?startDate=yyyy-MM-dd&endDate=yyyy-MM-dd  *(por rango de fechas)*
   - GET  /api/invoices/pending-review?maxConfidence=70  *(facturas con baja confianza en asignación)*
   - POST /api/invoices  (body: InvoiceDTO)
   - **POST /api/invoices/sync-gmail?gmailLabel=Facturas/Proyecto1** 🎯 *(sincronización automática desde Gmail)* 🆕
   - PUT  /api/invoices/{id}/assign-project?projectId=X  *(asignar proyecto manualmente)*
-  - PUT  /api/invoices/{id}/payment-status?paymentStatus=PAID  *(actualizar estado de pago)*
   - DELETE /api/invoices/{id}
 
 *Flujo de sincronización desde Gmail*:
 1. Llama `POST /api/invoices/sync-gmail?gmailLabel=Facturas` (especifica etiqueta de Gmail)
 2. Sistema autentica con Gmail usando OAuth 2.0 (credentials.json en src/main/resources/)
 3. Busca correos con esa etiqueta que tengan adjuntos
-4. Descarga adjuntos XML (formato DIAN - facturas electrónicas Colombia)
-5. Parsea cada XML y **verifica si ya existe** en BD por número de factura (evita duplicados)
+4. Descarga adjuntos:
+   - **XMLs directos**: Procesa inmediatamente
+   - **ZIPs**: Descomprime y extrae XMLs contenidos (las facturas suelen enviarse comprimidas con PDF+XML)
+5. Parsea cada XML (formato DIAN - facturas electrónicas Colombia) y **verifica si ya existe** en BD por número de factura (evita duplicados)
 6. Para **facturas nuevas**:
-   - Crea `Invoice` con `source=EMAIL_AUTO` y `paymentStatus=PENDING`
+   - Crea `Invoice` con:
+     * `source=EMAIL_AUTO` (todas las facturas de correo ya están pagadas)
+     * `withholdingTax` y `withholdingICA`: BigDecimal.ZERO si no existen en XML (nunca null)
    - Para cada ítem del XML:
-     * Busca/crea `Item` en catálogo (matching por código o descripción)
-     * Crea `InvoiceItem` vinculado al `Item` del catálogo
+     * Busca/crea `Item` en catálogo (matching por código o descripción, **sin precio** - el precio está en la factura)
+     * Crea `InvoiceItem` vinculado al `Item` del catálogo (aquí se guarda el precio de compra)
    - Evalúa **reglas de asignación automática**:
      * Si confianza ≥ 70%: asigna factura al proyecto y asocia items al proyecto
      * Si confianza < 70%: marca para revisión manual
-7. Elimina XMLs temporales (no se almacenan en disco)
+7. Elimina archivos temporales (ZIPs, XMLs extraídos después de procesarlos)
 8. Retorna estadísticas: emails procesados, facturas creadas, auto-asignadas, pendientes revisión
 
 ### InvoiceItem (Líneas de factura)
@@ -131,10 +133,10 @@ Nota: todos los controladores devuelven un objeto `Response<T>` (status, userMes
   - DELETE /api/invoice-items/{id}
 
 *Características especiales*:
-- **Precios variables**: Cada línea de factura tiene su propio precio unitario (el mismo ítem puede tener distintos precios en diferentes compras)
+- **Precios en facturas, no en catálogo**: El catálogo de `Item` NO tiene precio. Los precios están en `InvoiceItem` (cada compra puede tener precio diferente)
 - **Cálculo automático de totales**: El servicio calcula automáticamente el total considerando subtotal, IVA y retenciones
 - **Asignación de confianza**: Sistema de confianza (0-100%) para asignaciones automáticas de proyecto
-- **Estados de pago**: PENDING, PAID, OVERDUE, CANCELLED
+- **Todas pagadas**: Las facturas en el sistema ya están pagadas (no hay estados pendientes)
 
 ### ProjectAssignmentRule (Reglas de asignación automática) 🤖
   - GET  /api/assignment-rules

@@ -28,7 +28,6 @@ import com.construmedicis.buildtracking.email.services.InvoiceXmlParser;
 import com.construmedicis.buildtracking.invoice.dto.InvoiceDTO;
 import com.construmedicis.buildtracking.invoice.dto.InvoiceItemDTO;
 import com.construmedicis.buildtracking.invoice.models.Invoice.InvoiceSource;
-import com.construmedicis.buildtracking.invoice.models.Invoice.PaymentStatus;
 import com.construmedicis.buildtracking.invoice.services.InvoiceItemService;
 import com.construmedicis.buildtracking.invoice.services.InvoiceService;
 import com.construmedicis.buildtracking.item.models.Item;
@@ -294,7 +293,6 @@ public class EmailExtractionServiceImpl implements EmailExtractionService {
                 .withholdingTax(parsed.getWithholdingTax())
                 .withholdingICA(parsed.getWithholdingICA())
                 .total(parsed.getTotal())
-                .paymentStatus(PaymentStatus.PENDING)
                 .source(InvoiceSource.EMAIL_AUTO)
                 .assignmentConfidence(0) // Se actualizará después de evaluar reglas
                 .build();

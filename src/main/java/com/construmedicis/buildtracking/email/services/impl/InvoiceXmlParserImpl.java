@@ -1,8 +1,10 @@
 package com.construmedicis.buildtracking.email.services.impl;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -39,6 +41,9 @@ public class InvoiceXmlParserImpl implements InvoiceXmlParser {
             Document doc = builder.parse(xmlFile);
             doc.getDocumentElement().normalize();
 
+            // Intentar extraer el XML interno del CDATA (estructura envolvente)
+            doc = extractInnerXmlIfNeeded(doc, builder);
+
             ParsedInvoiceDTO invoice = new ParsedInvoiceDTO();
 
             // Número de factura
@@ -60,7 +65,7 @@ public class InvoiceXmlParserImpl implements InvoiceXmlParser {
             if (supplierNodes.getLength() > 0) {
                 Element supplierElement = (Element) supplierNodes.item(0);
                 invoice.setSupplierId(getElementValue(supplierElement, "cbc:CompanyID"));
-                
+
                 Element partyNameElement = (Element) supplierElement.getElementsByTagName("cac:PartyName").item(0);
                 if (partyNameElement != null) {
                     invoice.setSupplierName(getElementValue(partyNameElement, "cbc:Name"));
@@ -71,7 +76,7 @@ public class InvoiceXmlParserImpl implements InvoiceXmlParser {
             NodeList monetaryTotalNodes = doc.getElementsByTagName("cac:LegalMonetaryTotal");
             if (monetaryTotalNodes.getLength() > 0) {
                 Element monetaryElement = (Element) monetaryTotalNodes.item(0);
-                
+
                 String lineExtensionAmount = getElementValue(monetaryElement, "cbc:LineExtensionAmount");
                 if (lineExtensionAmount != null) {
                     invoice.setSubtotal(new BigDecimal(lineExtensionAmount));
@@ -97,7 +102,7 @@ public class InvoiceXmlParserImpl implements InvoiceXmlParser {
                 for (int i = 0; i < withholdingNodes.getLength(); i++) {
                     Element withholdingElement = (Element) withholdingNodes.item(i);
                     String taxAmount = getElementValue(withholdingElement, "cbc:TaxAmount");
-                    
+
                     // Intentar determinar el tipo de retención por el nombre del impuesto
                     NodeList taxSubtotalNodes = withholdingElement.getElementsByTagName("cac:TaxSubtotal");
                     if (taxSubtotalNodes.getLength() > 0) {
@@ -138,20 +143,50 @@ public class InvoiceXmlParserImpl implements InvoiceXmlParser {
             factory.setNamespaceAware(true);
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(xmlFile);
-            
+
+            // Intentar extraer el XML interno del CDATA (estructura envolvente)
+            doc = extractInnerXmlIfNeeded(doc, builder);
+
             // Validar elementos básicos que debe tener una factura DIAN
             String invoiceNumber = getElementValue(doc, "cbc:ID");
             String issueDate = getElementValue(doc, "cbc:IssueDate");
             NodeList supplierNodes = doc.getElementsByTagName("cac:AccountingSupplierParty");
-            
+
             return invoiceNumber != null && !invoiceNumber.isEmpty() &&
-                   issueDate != null && !issueDate.isEmpty() &&
-                   supplierNodes.getLength() > 0;
-                   
+                    issueDate != null && !issueDate.isEmpty() &&
+                    supplierNodes.getLength() > 0;
+
         } catch (Exception e) {
             log.warn("Archivo XML no válido: {}", e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Extrae el XML interno del CDATA si el documento tiene estructura envolvente.
+     * Las facturas DIAN a veces vienen envueltas en un XML contenedor donde el XML
+     * real está en el CDATA del elemento cbc:Description.
+     */
+    private Document extractInnerXmlIfNeeded(Document doc, DocumentBuilder builder) throws Exception {
+        // Intentar buscar cbc:Description con CDATA
+        NodeList descriptionNodes = doc.getElementsByTagName("cbc:Description");
+        if (descriptionNodes.getLength() > 0) {
+            String cdataContent = descriptionNodes.item(0).getTextContent();
+
+            // Verificar si el contenido parece ser XML (empieza con <?xml o <Invoice)
+            if (cdataContent != null
+                    && (cdataContent.trim().startsWith("<?xml") || cdataContent.trim().startsWith("<Invoice"))) {
+                log.debug("Detectada estructura envolvente, extrayendo XML interno del CDATA");
+                // Parsear el XML interno
+                Document innerDoc = builder
+                        .parse(new ByteArrayInputStream(cdataContent.getBytes(StandardCharsets.UTF_8)));
+                innerDoc.getDocumentElement().normalize();
+                return innerDoc;
+            }
+        }
+
+        // Si no hay estructura envolvente, retornar el documento original
+        return doc;
     }
 
     private List<ParsedInvoiceItemDTO> parseInvoiceItems(Document doc) {
@@ -189,7 +224,7 @@ public class InvoiceXmlParserImpl implements InvoiceXmlParser {
             if (itemNodes.getLength() > 0) {
                 Element itemElement = (Element) itemNodes.item(0);
                 item.setDescription(getElementValue(itemElement, "cbc:Description"));
-                
+
                 NodeList idNodes = itemElement.getElementsByTagName("cbc:ID");
                 if (idNodes.getLength() > 0) {
                     item.setItemCode(idNodes.item(0).getTextContent());

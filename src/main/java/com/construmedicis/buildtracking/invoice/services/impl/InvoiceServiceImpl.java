@@ -11,12 +11,13 @@ import com.construmedicis.buildtracking.invoice.dto.InvoiceDTO;
 import com.construmedicis.buildtracking.invoice.dto.InvoiceItemDTO;
 import com.construmedicis.buildtracking.invoice.models.Invoice;
 import com.construmedicis.buildtracking.invoice.models.Invoice.InvoiceSource;
-import com.construmedicis.buildtracking.invoice.models.Invoice.PaymentStatus;
+import com.construmedicis.buildtracking.invoice.models.InvoiceItem;
 import com.construmedicis.buildtracking.invoice.repository.InvoiceRepository;
 import com.construmedicis.buildtracking.invoice.services.InvoiceItemService;
 import com.construmedicis.buildtracking.invoice.services.InvoiceService;
 import com.construmedicis.buildtracking.item.models.Item;
 import com.construmedicis.buildtracking.item.services.ItemMatchingService;
+import com.construmedicis.buildtracking.project.models.Project;
 import com.construmedicis.buildtracking.project.repository.ProjectRepository;
 import com.construmedicis.buildtracking.util.exception.BusinessRuleException;
 import com.construmedicis.buildtracking.util.response.Response;
@@ -27,17 +28,23 @@ import com.google.api.services.gmail.model.Message;
 import com.google.api.services.gmail.model.MessagePart;
 import com.google.api.services.gmail.model.MessagePartBody;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipFile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -134,14 +141,6 @@ public class InvoiceServiceImpl implements InvoiceService {
     }
 
     @Override
-    public Response<List<InvoiceDTO>> findByPaymentStatus(PaymentStatus paymentStatus) {
-        List<InvoiceDTO> invoices = invoiceRepository.findByPaymentStatus(paymentStatus).stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
-        return new ResponseHandler<>(200, "Invoices found", "/api/invoices", invoices).getResponse();
-    }
-
-    @Override
     public Response<List<InvoiceDTO>> findBySupplierId(String supplierId) {
         List<InvoiceDTO> invoices = invoiceRepository.findBySupplierId(supplierId).stream()
                 .map(this::toDTO)
@@ -173,27 +172,18 @@ public class InvoiceServiceImpl implements InvoiceService {
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new BusinessRuleException("invoice.not.found"));
 
-        if (!projectRepository.existsById(projectId)) {
-            throw new BusinessRuleException("project.not.found");
-        }
+        var project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new BusinessRuleException("project.not.found"));
 
-        invoice.setProject(projectRepository.findById(projectId).get());
+        invoice.setProject(project);
         invoice.setAssignmentConfidence(100); // Asignación manual tiene 100% confianza
 
         Invoice updatedInvoice = invoiceRepository.save(invoice);
+
+        // Asociar los items de la factura al proyecto
+        associateInvoiceItemsToProject(invoice, project);
+
         return new ResponseHandler<>(200, "Project assigned to invoice", "/api/invoices/{id}/assign-project",
-                toDTO(updatedInvoice)).getResponse();
-    }
-
-    @Override
-    @Transactional
-    public Response<InvoiceDTO> updatePaymentStatus(Long invoiceId, PaymentStatus paymentStatus) {
-        Invoice invoice = invoiceRepository.findById(invoiceId)
-                .orElseThrow(() -> new BusinessRuleException("invoice.not.found"));
-
-        invoice.setPaymentStatus(paymentStatus);
-        Invoice updatedInvoice = invoiceRepository.save(invoice);
-        return new ResponseHandler<>(200, "Payment status updated", "/api/invoices/{id}/payment-status",
                 toDTO(updatedInvoice)).getResponse();
     }
 
@@ -218,12 +208,10 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .projectId(invoice.getProject() != null ? invoice.getProject().getId() : null)
                 .subtotal(invoice.getSubtotal())
                 .tax(invoice.getTax())
-                .withholdingTax(invoice.getWithholdingTax())
-                .withholdingICA(invoice.getWithholdingICA())
+                .withholdingTax(invoice.getWithholdingTax() != null ? invoice.getWithholdingTax() : BigDecimal.ZERO)
+                .withholdingICA(invoice.getWithholdingICA() != null ? invoice.getWithholdingICA() : BigDecimal.ZERO)
                 .total(invoice.getTotal())
-                .paymentStatus(invoice.getPaymentStatus())
                 .source(invoice.getSource())
-                .xmlFilePath(invoice.getXmlFilePath())
                 .assignmentConfidence(invoice.getAssignmentConfidence())
                 .invoiceItemIds(invoice.getInvoiceItems().stream()
                         .map(item -> item.getId())
@@ -244,9 +232,7 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .withholdingTax(dto.getWithholdingTax())
                 .withholdingICA(dto.getWithholdingICA())
                 .total(dto.getTotal())
-                .paymentStatus(dto.getPaymentStatus())
                 .source(dto.getSource())
-                .xmlFilePath(dto.getXmlFilePath())
                 .assignmentConfidence(dto.getAssignmentConfidence())
                 .build();
 
@@ -351,52 +337,296 @@ public class InvoiceServiceImpl implements InvoiceService {
 
     private void processMessageForInvoice(Gmail gmailService, Message message, EmailSyncResultDTO result)
             throws Exception {
-        if (message.getPayload() == null || message.getPayload().getParts() == null) {
+        log.debug("Procesando mensaje ID: {}", message.getId());
+
+        if (message.getPayload() == null) {
+            log.warn("Mensaje {} sin payload", message.getId());
             return;
         }
 
-        for (MessagePart part : message.getPayload().getParts()) {
+        // Buscar adjuntos recursivamente (pueden estar anidados)
+        List<MessagePart> attachments = findAttachments(message.getPayload());
+
+        if (attachments.isEmpty()) {
+            log.debug("Mensaje {} no tiene adjuntos", message.getId());
+            return;
+        }
+
+        log.info("Mensaje {} tiene {} adjuntos", message.getId(), attachments.size());
+
+        for (MessagePart part : attachments) {
             String filename = part.getFilename();
             if (filename != null && filename.toLowerCase().endsWith(".xml")) {
+                log.info("Procesando adjunto XML directo: {}", filename);
                 processXmlAttachment(gmailService, message.getId(), part, result);
+            } else if (filename != null && filename.toLowerCase().endsWith(".zip")) {
+                log.info("Procesando archivo ZIP: {}", filename);
+                processZipAttachment(gmailService, message.getId(), part, result);
+            } else if (filename != null) {
+                log.debug("Adjunto omitido (no XML ni ZIP): {}", filename);
             }
         }
     }
 
+    /**
+     * Procesa un archivo ZIP adjunto, extrayendo y procesando XMLs de facturas
+     * contenidos.
+     */
+    private void processZipAttachment(Gmail gmailService, String messageId, MessagePart part, EmailSyncResultDTO result)
+            throws Exception {
+        String filename = part.getFilename();
+        log.info("Descargando archivo ZIP: {} del mensaje {}", filename, messageId);
+
+        // Descargar ZIP
+        String attId = part.getBody().getAttachmentId();
+        if (attId == null) {
+            log.warn("Adjunto ZIP {} no tiene attachmentId", filename);
+            return;
+        }
+
+        MessagePartBody attachPart = gmailService.users().messages().attachments()
+                .get("me", messageId, attId)
+                .execute();
+
+        byte[] zipBytes = Base64.getUrlDecoder().decode(attachPart.getData());
+        File zipFile = new File(TEMP_DIR + filename);
+
+        try (FileOutputStream fos = new FileOutputStream(zipFile)) {
+            fos.write(zipBytes);
+        }
+
+        log.info("Archivo ZIP descargado: {} ({} bytes)", zipFile.getAbsolutePath(), zipBytes.length);
+
+        // Crear directorio para extraer
+        Path extractedDir = Path.of(TEMP_DIR + "extracted_" + System.currentTimeMillis());
+        Files.createDirectories(extractedDir);
+
+        try {
+            // Extraer ZIP
+            unzipFile(zipFile.toPath(), extractedDir);
+            log.info("ZIP extraído en: {}", extractedDir);
+
+            // Buscar XMLs en el contenido extraído
+            File[] extractedFiles = extractedDir.toFile().listFiles();
+            if (extractedFiles != null) {
+                for (File extractedFile : extractedFiles) {
+                    if (extractedFile.getName().toLowerCase().endsWith(".xml")) {
+                        log.info("Procesando XML extraído de ZIP: {}", extractedFile.getName());
+                        processExtractedXml(extractedFile, result);
+                    } else {
+                        log.debug("Archivo extraído omitido (no XML): {}", extractedFile.getName());
+                    }
+                }
+            }
+        } finally {
+            // Limpiar archivos temporales
+            deleteDirectory(extractedDir.toFile());
+            zipFile.delete();
+            log.debug("Archivos temporales eliminados: ZIP y directorio extraído");
+        }
+    }
+
+    /**
+     * Extrae un archivo ZIP en el directorio especificado.
+     */
+    private void unzipFile(Path zipPath, Path extractedDir) throws IOException {
+        try (ZipFile zipFile = new ZipFile(zipPath.toFile())) {
+            Enumeration<ZipArchiveEntry> entries = zipFile.getEntries();
+            while (entries.hasMoreElements()) {
+                ZipArchiveEntry entry = entries.nextElement();
+                File outFile = extractedDir.resolve(entry.getName()).toFile();
+
+                if (entry.isDirectory()) {
+                    outFile.mkdirs();
+                    continue;
+                }
+
+                // Crear carpetas intermedias si es necesario
+                outFile.getParentFile().mkdirs();
+
+                try (InputStream in = zipFile.getInputStream(entry);
+                        OutputStream out = new FileOutputStream(outFile)) {
+                    in.transferTo(out);
+                }
+                log.debug("Extraído: {}", outFile.getName());
+            }
+        }
+    }
+
+    /**
+     * Procesa un archivo XML ya extraído de un ZIP.
+     */
+    private void processExtractedXml(File xmlFile, EmailSyncResultDTO result) throws Exception {
+        log.info("Validando XML extraído: {} ({} bytes)", xmlFile.getName(), xmlFile.length());
+
+        try {
+            // Validar XML
+            if (!xmlParser.isValidInvoiceXml(xmlFile)) {
+                log.warn("XML no válido (no es formato DIAN): {}", xmlFile.getName());
+                return;
+            }
+
+            log.info("XML válido, parseando factura...");
+
+            // Parsear factura
+            ParsedInvoiceDTO parsedInvoice = xmlParser.parseXml(xmlFile);
+            log.info("Factura parseada: {}", parsedInvoice.getInvoiceNumber());
+
+            // Verificar si ya existe (evitar duplicados)
+            Optional<Invoice> existingInvoice = invoiceRepository
+                    .findByInvoiceNumber(parsedInvoice.getInvoiceNumber());
+            if (existingInvoice.isPresent()) {
+                log.info("Factura {} ya existe (ID: {}), omitiendo",
+                        parsedInvoice.getInvoiceNumber(), existingInvoice.get().getId());
+                return;
+            }
+
+            // Crear factura con la ruta del XML extraído
+            InvoiceDTO invoiceDTO = createInvoiceFromParsed(parsedInvoice, xmlFile.getAbsolutePath());
+            Invoice savedInvoice = fromDTO(invoiceDTO);
+            savedInvoice = invoiceRepository.save(savedInvoice);
+            result.setInvoicesCreated(result.getInvoicesCreated() + 1);
+
+            log.info("Factura {} creada exitosamente", parsedInvoice.getInvoiceNumber());
+
+            // Crear items y vincular al catálogo
+            for (ParsedInvoiceItemDTO parsedItem : parsedInvoice.getItems()) {
+                // Buscar o crear item en catálogo (sin proyecto por ahora)
+                Item catalogItem = itemMatchingService.findOrCreateItem(parsedItem, null);
+
+                // Crear invoice item vinculado
+                InvoiceItemDTO itemDTO = createInvoiceItemFromParsed(parsedItem, savedInvoice.getId());
+                itemDTO.setItemId(catalogItem.getId());
+                invoiceItemService.save(itemDTO);
+            }
+
+            // Evaluar reglas de asignación automática
+            Response<ProjectAssignmentResultDTO> assignmentResponse = assignmentRuleService
+                    .evaluateRulesForInvoice(toDTO(savedInvoice));
+
+            if (assignmentResponse.getStatus() == 200 && assignmentResponse.getData() != null) {
+                ProjectAssignmentResultDTO assignmentResult = assignmentResponse.getData();
+
+                // Actualizar confianza de asignación
+                savedInvoice.setAssignmentConfidence(assignmentResult.getConfidence());
+
+                if (assignmentResult.getConfidence() >= 70) {
+                    // Auto-asignar
+                    savedInvoice.setProject(projectRepository.findById(assignmentResult.getProjectId())
+                            .orElseThrow(() -> new BusinessRuleException("project.not.found")));
+                    savedInvoice = invoiceRepository.save(savedInvoice);
+                    result.setInvoicesAutoAssigned(result.getInvoicesAutoAssigned() + 1);
+
+                    // Asociar items al proyecto
+                    associateItemsToProject(parsedInvoice.getItems(), assignmentResult.getProjectId());
+
+                    log.info("Factura {} auto-asignada a proyecto {} (confianza: {}%)",
+                            parsedInvoice.getInvoiceNumber(),
+                            assignmentResult.getProjectId(),
+                            assignmentResult.getConfidence());
+                } else {
+                    // Guardar solo la confianza sin asignar proyecto
+                    invoiceRepository.save(savedInvoice);
+                    result.setInvoicesPendingReview(result.getInvoicesPendingReview() + 1);
+                    log.info("Factura {} pendiente revisión manual (confianza: {}%)",
+                            parsedInvoice.getInvoiceNumber(), assignmentResult.getConfidence());
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error procesando XML {}: {}", xmlFile.getName(), e.getMessage());
+            result.getErrors().add("Error en " + xmlFile.getName() + ": " + e.getMessage());
+        } finally {
+            // Eliminar archivo XML temporal
+            xmlFile.delete();
+        }
+    }
+
+    /**
+     * Elimina un directorio y todo su contenido recursivamente.
+     */
+    private void deleteDirectory(File dir) {
+        if (dir.isDirectory()) {
+            File[] files = dir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    deleteDirectory(file);
+                }
+            }
+        }
+        dir.delete();
+    }
+
+    /**
+     * Busca adjuntos recursivamente en todas las partes del mensaje.
+     * Gmail puede anidar adjuntos en multipart/mixed, multipart/alternative, etc.
+     */
+    private List<MessagePart> findAttachments(MessagePart part) {
+        List<MessagePart> attachments = new ArrayList<>();
+
+        // Si esta parte tiene attachmentId, es un adjunto
+        if (part.getBody() != null && part.getBody().getAttachmentId() != null) {
+            attachments.add(part);
+        }
+
+        // Buscar recursivamente en las subpartes
+        if (part.getParts() != null) {
+            for (MessagePart subPart : part.getParts()) {
+                attachments.addAll(findAttachments(subPart));
+            }
+        }
+
+        return attachments;
+    }
+
     private void processXmlAttachment(Gmail gmailService, String messageId, MessagePart part, EmailSyncResultDTO result)
             throws Exception {
+        String filename = part.getFilename();
+        log.info("Descargando adjunto XML: {} del mensaje {}", filename, messageId);
+
         // Descargar adjunto
         String attId = part.getBody().getAttachmentId();
+        if (attId == null) {
+            log.warn("Adjunto {} no tiene attachmentId", filename);
+            return;
+        }
+
         MessagePartBody attachPart = gmailService.users().messages().attachments()
                 .get("me", messageId, attId)
                 .execute();
 
         byte[] fileBytes = Base64.getUrlDecoder().decode(attachPart.getData());
-        File tempFile = new File(TEMP_DIR + part.getFilename());
+        File tempFile = new File(TEMP_DIR + filename);
 
         try (FileOutputStream fos = new FileOutputStream(tempFile)) {
             fos.write(fileBytes);
         }
 
+        log.info("Archivo XML descargado: {} ({} bytes)", tempFile.getAbsolutePath(), fileBytes.length);
+
         try {
             // Validar XML
             if (!xmlParser.isValidInvoiceXml(tempFile)) {
-                log.warn("XML no válido: {}", tempFile.getName());
+                log.warn("XML no válido (no es formato DIAN): {}", tempFile.getName());
                 return;
             }
+
+            log.info("XML válido, parseando factura...");
 
             // Parsear factura
             ParsedInvoiceDTO parsedInvoice = xmlParser.parseXml(tempFile);
+            log.info("Factura parseada: {}", parsedInvoice.getInvoiceNumber());
 
             // Verificar si ya existe (evitar duplicados)
-            Optional<Invoice> existingInvoice = invoiceRepository.findByInvoiceNumber(parsedInvoice.getInvoiceNumber());
+            Optional<Invoice> existingInvoice = invoiceRepository
+                    .findByInvoiceNumber(parsedInvoice.getInvoiceNumber());
             if (existingInvoice.isPresent()) {
-                log.info("Factura {} ya existe, omitiendo", parsedInvoice.getInvoiceNumber());
+                log.info("Factura {} ya existe (ID: {}), omitiendo",
+                        parsedInvoice.getInvoiceNumber(), existingInvoice.get().getId());
                 return;
             }
 
-            // Crear factura
-            InvoiceDTO invoiceDTO = createInvoiceFromParsed(parsedInvoice);
+            // Crear factura con la ruta del XML
+            InvoiceDTO invoiceDTO = createInvoiceFromParsed(parsedInvoice, tempFile.getAbsolutePath());
             Invoice savedInvoice = fromDTO(invoiceDTO);
             savedInvoice = invoiceRepository.save(savedInvoice);
             result.setInvoicesCreated(result.getInvoicesCreated() + 1);
@@ -461,7 +691,36 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
     }
 
+    /**
+     * Asocia los items de una factura existente a un proyecto.
+     * Se usa cuando se asigna manualmente una factura a un proyecto.
+     */
+    private void associateInvoiceItemsToProject(Invoice invoice, Project project) {
+        if (invoice.getInvoiceItems() == null || invoice.getInvoiceItems().isEmpty()) {
+            log.warn("Factura {} no tiene items para asociar al proyecto {}",
+                    invoice.getId(), project.getId());
+            return;
+        }
+
+        for (InvoiceItem invoiceItem : invoice.getInvoiceItems()) {
+            if (invoiceItem.getItem() != null) {
+                Item catalogItem = invoiceItem.getItem();
+
+                // Asociar el item al proyecto si aún no está asociado
+                if (!catalogItem.getProjects().contains(project)) {
+                    catalogItem.getProjects().add(project);
+                    log.info("Item {} asociado manualmente a proyecto {}",
+                            catalogItem.getId(), project.getId());
+                }
+            }
+        }
+    }
+
     private InvoiceDTO createInvoiceFromParsed(ParsedInvoiceDTO parsed) {
+        return createInvoiceFromParsed(parsed, null);
+    }
+
+    private InvoiceDTO createInvoiceFromParsed(ParsedInvoiceDTO parsed, String xmlFilePath) {
         return InvoiceDTO.builder()
                 .invoiceNumber(parsed.getInvoiceNumber())
                 .issueDate(parsed.getIssueDate())
@@ -470,11 +729,11 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .supplierName(parsed.getSupplierName())
                 .subtotal(parsed.getSubtotal())
                 .tax(parsed.getTax())
-                .withholdingTax(parsed.getWithholdingTax())
-                .withholdingICA(parsed.getWithholdingICA())
+                .withholdingTax(parsed.getWithholdingTax() != null ? parsed.getWithholdingTax() : BigDecimal.ZERO)
+                .withholdingICA(parsed.getWithholdingICA() != null ? parsed.getWithholdingICA() : BigDecimal.ZERO)
                 .total(parsed.getTotal())
-                .paymentStatus(PaymentStatus.PENDING)
                 .source(InvoiceSource.EMAIL_AUTO)
+                .assignmentConfidence(0) // Se actualizará después de evaluar reglas
                 .build();
     }
 

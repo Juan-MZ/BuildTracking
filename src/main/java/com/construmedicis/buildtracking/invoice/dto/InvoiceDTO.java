@@ -1,7 +1,6 @@
 package com.construmedicis.buildtracking.invoice.dto;
 
 import com.construmedicis.buildtracking.invoice.models.Invoice.InvoiceSource;
-import com.construmedicis.buildtracking.invoice.models.Invoice.PaymentStatus;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -27,9 +26,7 @@ public class InvoiceDTO {
     private BigDecimal withholdingTax;
     private BigDecimal withholdingICA;
     private BigDecimal total;
-    private PaymentStatus paymentStatus;
     private InvoiceSource source;
-    private String xmlFilePath;
     private Integer assignmentConfidence;
     private List<Long> invoiceItemIds; // IDs de las líneas de factura
 }

@@ -76,6 +76,12 @@
 			<artifactId>google-api-services-gmail</artifactId>
 			<version>v1-rev20220404-2.0.0</version>
 		</dependency>
+		<!-- Apache Commons Compress for ZIP extraction -->
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-compress</artifactId>
+			<version>1.26.0</version>
+		</dependency>
 	</dependencies>
 
 	<build>

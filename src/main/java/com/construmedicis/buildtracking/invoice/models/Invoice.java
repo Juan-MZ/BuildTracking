@@ -58,13 +58,7 @@ public class Invoice {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private PaymentStatus paymentStatus;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private InvoiceSource source;
-
-    private String xmlFilePath; // Ruta al XML original (si aplica)
 
     @Column(nullable = false)
     private Integer assignmentConfidence; // 0-100% confianza en asignación automática
@@ -73,17 +67,10 @@ public class Invoice {
     @Builder.Default
     private List<InvoiceItem> invoiceItems = new ArrayList<>();
 
-    public enum PaymentStatus {
-        PENDING,
-        PAID,
-        OVERDUE,
-        CANCELLED
-    }
-
     public enum InvoiceSource {
-        MANUAL,          // Ingreso manual por usuario
-        EMAIL_AUTO,      // Extracción automática desde email
-        XML_UPLOAD       // Cargue directo de archivo XML
+        MANUAL, // Ingreso manual por usuario
+        EMAIL_AUTO, // Extracción automática desde email
+        XML_UPLOAD // Cargue directo de archivo XML
     }
 
     // Método helper para agregar items

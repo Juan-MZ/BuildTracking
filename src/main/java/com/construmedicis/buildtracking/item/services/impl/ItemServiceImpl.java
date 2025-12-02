@@ -33,7 +33,6 @@ public class ItemServiceImpl implements ItemService {
         i.setId(dto.getId());
         i.setName(dto.getName());
         i.setDescription(dto.getDescription());
-        i.setPrice(dto.getPrice());
         i.setQuantity(dto.getQuantity());
         if (dto.getProjectIds() != null) {
             var projects = dto.getProjectIds().stream()
@@ -71,13 +70,15 @@ public class ItemServiceImpl implements ItemService {
         Optional<Item> opt = repository.findById(id);
         if (opt.isEmpty())
             throw new BusinessRuleException("item.not.found");
-        
+
         Item item = opt.get();
-        if (itemDTO.getName() != null) item.setName(itemDTO.getName());
-        if (itemDTO.getDescription() != null) item.setDescription(itemDTO.getDescription());
-        if (itemDTO.getPrice() != null) item.setPrice(itemDTO.getPrice());
-        if (itemDTO.getQuantity() != null) item.setQuantity(itemDTO.getQuantity());
-        
+        if (itemDTO.getName() != null)
+            item.setName(itemDTO.getName());
+        if (itemDTO.getDescription() != null)
+            item.setDescription(itemDTO.getDescription());
+        if (itemDTO.getQuantity() != null)
+            item.setQuantity(itemDTO.getQuantity());
+
         if (itemDTO.getProjectIds() != null) {
             var projects = itemDTO.getProjectIds().stream()
                     .map(pid -> projectRepository.findById(pid)
@@ -85,7 +86,7 @@ public class ItemServiceImpl implements ItemService {
                     .collect(Collectors.toList());
             item.setProjects(projects);
         }
-        
+
         Item updated = repository.save(item);
         return new ResponseHandler<>(200, "Item updated", "/api/items/{id}", toDTO(updated)).getResponse();
     }
@@ -94,11 +95,12 @@ public class ItemServiceImpl implements ItemService {
     public Response<List<ItemDTO>> findByProjectId(Long projectId) {
         if (!projectRepository.existsById(projectId))
             throw new BusinessRuleException("project.not.found");
-        
+
         List<ItemDTO> list = repository.findByProjects_Id(projectId).stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
-        return new ResponseHandler<>(200, "Items fetched by project", "/api/items/project/{projectId}", list).getResponse();
+        return new ResponseHandler<>(200, "Items fetched by project", "/api/items/project/{projectId}", list)
+                .getResponse();
     }
 
     @Override
@@ -116,7 +118,6 @@ public class ItemServiceImpl implements ItemService {
                 .id(i.getId())
                 .name(i.getName())
                 .description(i.getDescription())
-                .price(i.getPrice())
                 .quantity(i.getQuantity())
                 .projectIds(i.getProjects() != null
                         ? i.getProjects().stream().map(p -> p.getId()).collect(Collectors.toList())
