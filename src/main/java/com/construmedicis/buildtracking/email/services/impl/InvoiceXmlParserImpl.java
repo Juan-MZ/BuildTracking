@@ -35,10 +35,12 @@ public class InvoiceXmlParserImpl implements InvoiceXmlParser {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final DateTimeFormatter DATETIME_FORMATTER_ALT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter DATETIME_WITH_OFFSET = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
     /**
      * Parsea una fecha que puede venir en formato fecha sola o fecha+hora.
      * Si solo viene fecha, se asume hora 00:00:00.
+     * Soporta timezone offset (ej: 2025-12-02T14:31:42-05:00)
      */
     private LocalDateTime parseDateTime(String dateStr) {
         if (dateStr == null || dateStr.isEmpty()) {
@@ -46,20 +48,25 @@ public class InvoiceXmlParserImpl implements InvoiceXmlParser {
         }
 
         try {
-            // Intentar con fecha+hora ISO (yyyy-MM-dd'T'HH:mm:ss)
-            return LocalDateTime.parse(dateStr, DATETIME_FORMATTER);
+            // Intentar con fecha+hora+timezone ISO (yyyy-MM-dd'T'HH:mm:ssXXX)
+            return java.time.ZonedDateTime.parse(dateStr, DATETIME_WITH_OFFSET).toLocalDateTime();
         } catch (DateTimeParseException e1) {
             try {
-                // Intentar con fecha+hora alternativa (yyyy-MM-dd HH:mm:ss)
-                return LocalDateTime.parse(dateStr, DATETIME_FORMATTER_ALT);
+                // Intentar con fecha+hora ISO sin timezone (yyyy-MM-dd'T'HH:mm:ss)
+                return LocalDateTime.parse(dateStr, DATETIME_FORMATTER);
             } catch (DateTimeParseException e2) {
                 try {
-                    // Intentar solo con fecha (yyyy-MM-dd) y agregar hora 00:00:00
-                    LocalDate date = LocalDate.parse(dateStr, DATE_FORMATTER);
-                    return date.atStartOfDay();
+                    // Intentar con fecha+hora alternativa (yyyy-MM-dd HH:mm:ss)
+                    return LocalDateTime.parse(dateStr, DATETIME_FORMATTER_ALT);
                 } catch (DateTimeParseException e3) {
-                    log.warn("No se pudo parsear la fecha: {}", dateStr);
-                    return null;
+                    try {
+                        // Intentar solo con fecha (yyyy-MM-dd) y agregar hora 00:00:00
+                        LocalDate date = LocalDate.parse(dateStr, DATE_FORMATTER);
+                        return date.atStartOfDay();
+                    } catch (DateTimeParseException e4) {
+                        log.warn("No se pudo parsear la fecha: {}", dateStr);
+                        return null;
+                    }
                 }
             }
         }

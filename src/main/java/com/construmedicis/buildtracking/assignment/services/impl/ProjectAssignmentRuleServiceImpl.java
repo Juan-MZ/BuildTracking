@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -161,7 +162,7 @@ public class ProjectAssignmentRuleServiceImpl implements ProjectAssignmentRuleSe
 
             case DATE_RANGE:
                 if (rule.getStartDate() != null && rule.getEndDate() != null && invoice.getIssueDate() != null) {
-                    LocalDate issueDate = invoice.getIssueDate();
+                    LocalDate issueDate = invoice.getIssueDate().toLocalDate();
                     if (!issueDate.isBefore(rule.getStartDate()) && !issueDate.isAfter(rule.getEndDate())) {
                         matches = true;
                         confidence = 70; // Media confianza por fecha
