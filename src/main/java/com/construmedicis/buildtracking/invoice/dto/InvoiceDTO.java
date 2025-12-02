@@ -4,7 +4,7 @@ import com.construmedicis.buildtracking.invoice.models.Invoice.InvoiceSource;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Getter
@@ -16,8 +16,8 @@ public class InvoiceDTO {
 
     private Long id;
     private String invoiceNumber;
-    private LocalDate issueDate;
-    private LocalDate dueDate;
+    private LocalDateTime issueDate;
+    private LocalDateTime dueDate;
     private String supplierId;
     private String supplierName;
     private Long projectId;

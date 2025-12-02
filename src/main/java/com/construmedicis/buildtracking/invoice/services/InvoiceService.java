@@ -4,7 +4,7 @@ import com.construmedicis.buildtracking.email.dto.EmailSyncResultDTO;
 import com.construmedicis.buildtracking.invoice.dto.InvoiceDTO;
 import com.construmedicis.buildtracking.util.response.Response;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface InvoiceService {
@@ -21,7 +21,7 @@ public interface InvoiceService {
 
     Response<List<InvoiceDTO>> findBySupplierId(String supplierId);
 
-    Response<List<InvoiceDTO>> findByDateRange(LocalDate startDate, LocalDate endDate);
+    Response<List<InvoiceDTO>> findByDateRange(LocalDateTime startDate, LocalDateTime endDate);
 
     Response<List<InvoiceDTO>> findPendingReview(Integer maxConfidence);
 

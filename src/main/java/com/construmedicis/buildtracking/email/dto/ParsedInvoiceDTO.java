@@ -1,7 +1,7 @@
 package com.construmedicis.buildtracking.email.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import lombok.*;
@@ -14,8 +14,8 @@ import lombok.*;
 public class ParsedInvoiceDTO {
 
     private String invoiceNumber;
-    private LocalDate issueDate;
-    private LocalDate dueDate;
+    private LocalDateTime issueDate;
+    private LocalDateTime dueDate;
     private String supplierId; // NIT
     private String supplierName;
     private BigDecimal subtotal;

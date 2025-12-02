@@ -5,7 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,9 +27,9 @@ public class Invoice {
     private String invoiceNumber;
 
     @Column(nullable = false)
-    private LocalDate issueDate;
+    private LocalDateTime issueDate;
 
-    private LocalDate dueDate;
+    private LocalDateTime dueDate;
 
     @Column(nullable = false)
     private String supplierId; // NIT o identificación del proveedor

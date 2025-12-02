@@ -43,6 +43,7 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Enumeration;
@@ -154,7 +155,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     }
 
     @Override
-    public Response<List<InvoiceDTO>> findByDateRange(LocalDate startDate, LocalDate endDate) {
+    public Response<List<InvoiceDTO>> findByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
         List<InvoiceDTO> invoices = invoiceRepository.findByIssueDateBetween(startDate, endDate).stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());

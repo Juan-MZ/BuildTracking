@@ -4,7 +4,7 @@ import com.construmedicis.buildtracking.invoice.models.Invoice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -17,7 +17,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     List<Invoice> findBySupplierId(String supplierId);
 
-    List<Invoice> findByIssueDateBetween(LocalDate startDate, LocalDate endDate);
+    List<Invoice> findByIssueDateBetween(LocalDateTime startDate, LocalDateTime endDate);
 
     List<Invoice> findByAssignmentConfidenceLessThan(Integer confidence);
 }

@@ -6,7 +6,9 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,6 +33,37 @@ import lombok.extern.slf4j.Slf4j;
 public class InvoiceXmlParserImpl implements InvoiceXmlParser {
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+    private static final DateTimeFormatter DATETIME_FORMATTER_ALT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /**
+     * Parsea una fecha que puede venir en formato fecha sola o fecha+hora.
+     * Si solo viene fecha, se asume hora 00:00:00.
+     */
+    private LocalDateTime parseDateTime(String dateStr) {
+        if (dateStr == null || dateStr.isEmpty()) {
+            return null;
+        }
+
+        try {
+            // Intentar con fecha+hora ISO (yyyy-MM-dd'T'HH:mm:ss)
+            return LocalDateTime.parse(dateStr, DATETIME_FORMATTER);
+        } catch (DateTimeParseException e1) {
+            try {
+                // Intentar con fecha+hora alternativa (yyyy-MM-dd HH:mm:ss)
+                return LocalDateTime.parse(dateStr, DATETIME_FORMATTER_ALT);
+            } catch (DateTimeParseException e2) {
+                try {
+                    // Intentar solo con fecha (yyyy-MM-dd) y agregar hora 00:00:00
+                    LocalDate date = LocalDate.parse(dateStr, DATE_FORMATTER);
+                    return date.atStartOfDay();
+                } catch (DateTimeParseException e3) {
+                    log.warn("No se pudo parsear la fecha: {}", dateStr);
+                    return null;
+                }
+            }
+        }
+    }
 
     @Override
     public ParsedInvoiceDTO parseXml(File xmlFile) throws IOException {
@@ -52,12 +85,18 @@ public class InvoiceXmlParserImpl implements InvoiceXmlParser {
             // Fechas
             String issueDateStr = getElementValue(doc, "cbc:IssueDate");
             if (issueDateStr != null && !issueDateStr.isEmpty()) {
-                invoice.setIssueDate(LocalDate.parse(issueDateStr, DATE_FORMATTER));
+                // Intentar obtener también la hora si existe
+                String issueTimeStr = getElementValue(doc, "cbc:IssueTime");
+                if (issueTimeStr != null && !issueTimeStr.isEmpty()) {
+                    invoice.setIssueDate(parseDateTime(issueDateStr + "T" + issueTimeStr));
+                } else {
+                    invoice.setIssueDate(parseDateTime(issueDateStr));
+                }
             }
 
             String dueDateStr = getElementValue(doc, "cbc:DueDate");
             if (dueDateStr != null && !dueDateStr.isEmpty()) {
-                invoice.setDueDate(LocalDate.parse(dueDateStr, DATE_FORMATTER));
+                invoice.setDueDate(parseDateTime(dueDateStr));
             }
 
             // Información del proveedor (AccountingSupplierParty)
